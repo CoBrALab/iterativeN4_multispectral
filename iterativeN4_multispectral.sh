@@ -179,14 +179,14 @@ minc_anlm ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/denoise.mnc
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
 
 #Register to MNI space
-antsRegistration --dimensionality 3 --float 0 --collapse-output-transforms 1 --minc -n BSpline[5] \
+antsRegistration --dimensionality 3 --float 1 --collapse-output-transforms 1 --minc -n BSpline[5] \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1] \
-  --transform Rigid[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.25] --convergence [1000x500x250,1e-6,10] --shrink-factors 8x4x4 --smoothing-sigmas ${blur16mm}x${blur8mm}x${blur4mm}mm --masks [NULL,NULL] \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.5] --convergence [500x250x100,1e-6,10] --shrink-factors 4x4x2 --smoothing-sigmas ${blur8mm}x${blur4mm}x${blur2mm}mm --masks [NULL,NULL] \
-  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.75] --convergence [250x100x50,1e-6,10] --shrink-factors 4x2x2 --smoothing-sigmas ${blur4mm}x${blur2mm}x${blur1mm}mm --masks [NULL,NULL] \
-  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,1] --convergence [100x50x25x10,1e-6,10] --shrink-factors 2x2x1x1 --smoothing-sigmas ${blur2mm}x${blur1mm}x${blur05mm}x0mm \
+  --transform Rigid[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.25] --convergence [500x250x100,1e-6,10] --shrink-factors 16x8x4 --smoothing-sigmas 64x16x4 --masks [NULL,NULL] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.5] --convergence [250x100x50,1e-6,10] --shrink-factors 8x4x2 --smoothing-sigmas 16x4x1 --masks [NULL,NULL] \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.5] --convergence [250x100x50,1e-6,10] --shrink-factors 8x4x2 --smoothing-sigmas 16x4x1--masks [NULL,NULL] \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.5] --convergence [100x50x25,1e-6,10] --shrink-factors 4x2x1 --smoothing-sigmas 4x1x0 \
   --masks [${REGISTRATIONBRAINMASK},NULL]
 
 #Repeat with nuyl matched registration
@@ -196,8 +196,9 @@ antsRegistration --dimensionality 3 --float 0 --collapse-output-transforms 1 --m
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,32,Regular,1] --convergence [500x250x100x50x25,1e-6,10] --shrink-factors 4x2x2x1x1 --smoothing-sigmas ${blur4mm}x${blur2mm}x${blur1mm}x${blur05mm}x0mm \
-  --masks [${REGISTRATIONBRAINMASK},${tmpdir}/${n}/mnimask.mnc]
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,32,Regular,1] --convergence [250x100x50x25,1e-6,10] --shrink-factors 4x3x2x1 --smoothing-sigmas 4x2.25x1x0 \
+  --masks [${REGISTRATIONBRAINMASK},NULL]
+
 antsApplyTransforms -d 3 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${REGISTRATIONMODEL}
 
 #BSpline[5] does weird things to intensity, clip back to positive range
@@ -328,7 +329,7 @@ antsRegistration --dimensionality 3 --float 0 --collapse-output-transforms 1 --m
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,32,Regular,1] --convergence [500x250x100x50x25,1e-6,10] --shrink-factors 4x2x2x1x1 --smoothing-sigmas ${blur4mm}x${blur2mm}x${blur1mm}x${blur05mm}x0mm \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,32,Regular,1] --convergence [100x50x25x25,1e-6,10] --shrink-factors 3x2x1x1 --smoothing-sigmas 2.25x1x0.25x0 \
   --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask.mnc]
 
 antsApplyTransforms -d 3 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${REGISTRATIONMODEL}
@@ -351,9 +352,9 @@ antsRegistration --dimensionality 3 --float 1 --collapse-output-transforms 1 -a 
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
   --use-histogram-matching 0 \
   --transform SyN[0.1,3,0] --metric CC[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,4] \
-  --convergence [500x250x100x50x25x10,1e-6,10] \
-  --shrink-factors 8x4x2x2x2x1 \
-  --smoothing-sigmas ${blur16mm}x${blur8mm}x${blur4mm}x${blur2mm}x${blur1mm}x0mm \
+  --convergence [500x250x100x50x25,1e-6,10] \
+  --shrink-factors 16x8x4x2x1 \
+  --smoothing-sigmas 64x16x2x1x0 \
   --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask.mnc]
 
 #Resample MNI Priors to Native space for classification
@@ -457,7 +458,7 @@ while true; do
     --output [${tmpdir}/${n}/mni] \
     --use-histogram-matching 0 \
     --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-    --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,32,Regular,1] --convergence [500x250x100x50x25,1e-6,10] --shrink-factors 4x2x2x1x1 --smoothing-sigmas ${blur4mm}x${blur2mm}x${blur1mm}x${blur05mm}x0mm \
+    --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,32,Regular,1] --convergence [100x50x25x25,1e-6,10] --shrink-factors 3x2x1x1 --smoothing-sigmas 2.25x1x0.25x0 \
     --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask.mnc]
 
   antsApplyTransforms -d 3 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${REGISTRATIONMODEL}
