@@ -1,6 +1,16 @@
 #!/bin/bash
+IFS=$'\n\t'
 set -euo pipefail
 set -x
+
+
+#TODO Add setting to allow override
+tmpdir=$(mktemp -d)
+function finish {
+  rm -rf "${tmpdir}"
+}
+trap finish EXIT
+
 
 #Set local parallelism inherited from QBATCH
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=${THREADS_PER_COMMAND:-$(nproc)}
@@ -8,11 +18,20 @@ export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=${THREADS_PER_COMMAND:-$(nproc)}
 #Locate priors for processing
 #TODO Allow external specification
 BEASTLIBRARY_DIR="${QUARANTINE_PATH}/resources/BEaST_libraries/combined"
+
+#Normal adult priors
 REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
 REGISTRATIONBRAINMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
 WMPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_wm_tal_nlin_sym_09c.mnc"
 GMPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_gm_tal_nlin_sym_09c.mnc"
 CSFPRIOR="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_csf_tal_nlin_sym_09c.mnc"
+
+#For other priors in MNI space see
+# - nihpd_sym_all_minc2
+# - ADNI priors
+
+RESAMPLEMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
+RESAMPLEMODELBRAINMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
 
 #Mangle inputs
 #Order is output file, then T1, then any others
@@ -20,9 +39,6 @@ output=$1
 originput=$2
 shift 2
 multispectral_inputs=("$@")
-
-#Add setting to allow override
-tmpdir=$(mktemp -d)
 
 #Internal resampled input used for processing
 input=${tmpdir}/input.mnc
@@ -187,7 +203,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-trans
 #Repeat with nuyl matched registration
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/input.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/${n}/mnimask.mnc 4 1 ball 1
-minc_nuyl ${tmpdir}/${n}/input.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/${n}/shrinkmask.mnc --target-mask ${REGISTRATIONBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
+minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/${n}/shrinkmask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-transforms 1 --minc \
   --output [${tmpdir}/${n}/mni] \
@@ -200,7 +216,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-trans
   --smoothing-sigmas 0.8493218002880191x0.42466090014400953x0.21233045007200477x0mm \
   --masks [${REGISTRATIONBRAINMASK},NULL]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${REGISTRATIONMODEL}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 #BSpline[5] does weird things to intensity, clip back to positive range
 mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
@@ -208,10 +224,10 @@ mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink the MNI mask for the first intensity matching
 rm -f ${tmpdir}/${n}/shrinkmask.mnc
-iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${REGISTRATIONBRAINMASK} 4 1 ball 1
+iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 4 1 ball 1
 
 #Intensity normalize
-volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${REGISTRATIONMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
+volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
 mincbeast ${N4_VERBOSE:+-verbose} -clobber -fill -median -same_res -flip -conf ${BEASTLIBRARY_DIR}/default.2mm.conf ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
@@ -243,7 +259,7 @@ do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}
 
 #Align multispectral inputs into T1 space
 if (( ${#multispectral_inputs[@]} > 0 )); then
-    echo "Needs to be reimplemented"
+  echo "Needs to be reimplemented"
 else
   cp -f ${tmpdir}/initweight.mnc ${tmpdir}/global_exclude.mnc
 fi
@@ -263,7 +279,7 @@ cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/input.mnc
 minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/denoise.mnc
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
 
-minc_nuyl ${tmpdir}/${n}/input.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${REGISTRATIONBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
+minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
 #Affine register to MNI space, tweak registration
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-transforms 1 --minc \
@@ -277,7 +293,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-trans
   --smoothing-sigmas 0.8493218002880191x0.42466090014400953x0.21233045007200477x0mm \
   --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${REGISTRATIONMODEL}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
@@ -286,7 +302,7 @@ mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/$((n - 1))/beastmask.mnc 5 1 ball 1
 
 #Intensity normalize
-volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${REGISTRATIONMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${REGISTRATIONBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
+volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
 mincbeast ${N4_VERBOSE:+-verbose} -clobber -fill -median -same_res -flip -conf ${BEASTLIBRARY_DIR}/default.1mm.conf ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
@@ -334,7 +350,7 @@ ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/glob
 #Do an initial classification using the MNI priors
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs}  \
   -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.25] -k HistogramParzenWindows -m [0.1,1x1x1] \
-  -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Socrates[0] 1 --winsorize-outliers BoxPlot
+  -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] 1 --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
 
 classify_to_mask
 
@@ -349,7 +365,7 @@ cleanup_posteriors
 do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
 if (( ${#multispectral_inputs[@]} > 0 )); then
-    echo "Need to implement"
+  echo "Need to implement"
 fi
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
@@ -369,7 +385,7 @@ while true; do
   minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/denoise.mnc
   mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
 
-  minc_nuyl ${tmpdir}/${n}/input.mnc ${REGISTRATIONMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${REGISTRATIONBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
+  minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
   #Resample beast mask and MNI mask to native space
   cp -f ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/mnimask.mnc
@@ -388,7 +404,7 @@ while true; do
   #Do an initial classification using the last round posteriors, remove outliers
   Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${atropos_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
-    -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Socrates[1] --winsorize-outliers BoxPlot
+    -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
 
   classify_to_mask
 
@@ -410,7 +426,6 @@ while true; do
   #Compute coeffcient of variation
   minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
   python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
-  #python -c "print $(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc) / $(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)" >>${tmpdir}/convergence.txt
 
   rm -rf ${tmpdir}/$((n - 1))
 
@@ -436,11 +451,11 @@ minccalc -quiet -unsigned -byte -expression 'A[0]?1:1' ${originput} ${tmpdir}/or
 do_N4_correct ${originput} ${tmpdir}/originitmask.mnc ${tmpdir}/finalmask.mnc ${tmpdir}/finalweight.mnc ${maxval} ${tmpdir}/corrected.mnc ${tmpdir}/bias.mnc ${shrink_final_round}
 
 if (( ${#multispectral_inputs[@]} > 0 )); then
-    echo "Need to implement"
+  echo "Need to implement"
 fi
 
 cp -f ${tmpdir}/corrected.mnc ${output}
-if [[ -z "${N4_STANDALONE-}" ]]; then
+if [[ -z "${N4_STANDALONE:-}" ]]; then
   cp -f ${tmpdir}/finalbmask.mnc $(dirname $output)/$(basename $output .mnc).beastmask.mnc
   cp -f ${tmpdir}/finalmnimask.mnc $(dirname $output)/$(basename $output .mnc).mnimask.mnc
   cp -f ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename $output .mnc).classifymask.mnc
