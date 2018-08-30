@@ -266,7 +266,6 @@ fi
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
-#python -c "print $(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc) / $(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)" >>${tmpdir}/convergence.txt
 rm -rf ${tmpdir}/$((n - 1))
 
 ################################################################################
@@ -344,7 +343,6 @@ ThresholdImage 3 ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/hotmask.mnc \
 
 #Exclude lesions and such
 ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/global_exclude.mnc ${lesionmask}
-#ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m  ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Do an initial classification using the MNI priors
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs}  \
@@ -356,7 +354,6 @@ classify_to_mask
 #Combine GM and WM probably images into a N4 mask,
 ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classifymask.mnc #${lesionmask} ${tmpdir}/global_exclude.mnc
-#SmoothImage 3 ${tmpdir}/${n}/weight.mnc 0.5 ${tmpdir}/${n}/weight.mnc 0 0
 ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/primary_weight.mnc 0 1
 
@@ -369,7 +366,6 @@ fi
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
-#python -c "print $(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc) / $(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)" >>${tmpdir}/convergence.txt
 rm -rf ${tmpdir}/$((n - 1))
 
 ################################################################################
@@ -398,7 +394,6 @@ while true; do
     0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/input.mnc) 1 0
 
   ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/global_exclude.mnc ${lesionmask}
-  #ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
   #Do an initial classification using the last round posteriors, remove outliers
   Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
@@ -410,7 +405,6 @@ while true; do
   #Combine GM and WM probably images into a N4 mask,
   ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classifymask.mnc #${lesionmask} ${tmpdir}/global_exclude.mnc
-  #SmoothImage 3 ${tmpdir}/${n}/weight.mnc 0.5 ${tmpdir}/${n}/weight.mnc 0 0
   ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
   ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/primary_weight.mnc 0 1
 
