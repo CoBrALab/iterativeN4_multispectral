@@ -14,6 +14,8 @@ trap finish EXIT
 
 #Set local parallelism inherited from QBATCH
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=${THREADS_PER_COMMAND:-$(nproc)}
+export ITK_USE_THREADPOOL=1
+export ITK_GLOBAL_DEFAULT_THREADER=Pool
 
 #Locate priors for processing
 #TODO Allow external specification
