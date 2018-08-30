@@ -454,7 +454,7 @@ if (( ${#multispectral_inputs[@]} > 0 )); then
 fi
 
 cp -f ${tmpdir}/corrected.mnc ${output}
-if [[ -z "${N4_STANDALONE:-}" ]]; then
+if [[ -n "${N4_STANDALONE:-}" ]]; then
   cp -f ${tmpdir}/finalbmask.mnc $(dirname $output)/$(basename $output .mnc).beastmask.mnc
   cp -f ${tmpdir}/finalmnimask.mnc $(dirname $output)/$(basename $output .mnc).mnimask.mnc
   cp -f ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename $output .mnc).classifymask.mnc
