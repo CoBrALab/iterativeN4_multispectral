@@ -1,8 +1,10 @@
 #!/bin/bash
 IFS=$'\n\t'
 set -euo pipefail
-set -x
 
+if [[ -n "${N4_VERBOSE:-}" ]]; then
+  set -x
+fi
 
 #TODO Add setting to allow override
 tmpdir=$(mktemp -d)
