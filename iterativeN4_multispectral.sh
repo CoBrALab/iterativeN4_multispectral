@@ -450,7 +450,7 @@ echo "Convergence results:"
 cat ${tmpdir}/convergence.txt
 
 #Transform all the working files into the original input space
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/primary_weight.mnc -o ${tmpdir}/finalweight.mnc -r ${originput} -n Linear
+mincresample -like ${originput} ${tmpdir}/${n}/primary_weight.mnc ${tmpdir}/finalweight.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/mask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${originput} -n GenericLabel
