@@ -389,7 +389,7 @@ ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/glob
 #Do an initial classification using the MNI priors
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs}  \
   -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.25] -k HistogramParzenWindows -m [0.1,1x1x1] \
-  -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] 1 --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
+  -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
 
 classify_to_mask
 
