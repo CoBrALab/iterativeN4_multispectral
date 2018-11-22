@@ -135,7 +135,7 @@ ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
 mv -f ${tmpdir}/input.clamp.mnc ${input}
 ImageMath 3 ${tmpdir}/cropmask.mnc ThresholdAtMean ${input} 1
-ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/cropmask.mnc 1 10
+autocrop -bbox ${tmpdir}/cropmask.mnc -isoexpand 10mm ${input} ${tmpdir}/input.crop.mnc
 mv -f ${tmpdir}/input.crop.mnc ${input}
 
 if [[ ! -z ${lesionmask} ]]; then
