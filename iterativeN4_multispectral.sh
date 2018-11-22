@@ -149,7 +149,7 @@ dz=$(mincinfo -attvalue zspace:step ${originput})
 shrink_final_round=$(python -c "import math; print(max(2,int(math.ceil(2.0 / ( ( abs($dx) + abs($dy) + abs($dz) ) / 3.0)))))")
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
-minccalc -quiet -unsigned -byte -expression 'A[0]?1:1' ${input} ${tmpdir}/initmask.mnc
+minccalc -quiet -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 minccalc -quiet -unsigned -byte -expression 'A[0]>0?1:0' ${input} ${tmpdir}/initweight.mnc
 ################################################################################
 #Round 0, N4 across areas greater than 1% of mean
