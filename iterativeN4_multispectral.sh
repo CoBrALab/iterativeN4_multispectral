@@ -227,12 +227,17 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
   --masks [NULL,NULL] \
-  --transform Affine[0.1] --metric GC[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,128,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --convergence [800x566x400,1e-6,10] \
+  --shrink-factors 8x6x4 \
+  --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
+  --masks [${REGISTRATIONBRAINMASK},NULL] \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,128,Regular,0.95] \
   --convergence [400x283x200,1e-6,10] \
   --shrink-factors 4x3x3 \
   --smoothing-sigmas 3.98448927075x2.80644877892x1.96879525311mm \
   --masks [${REGISTRATIONBRAINMASK},NULL] \
-  --transform Affine[0.05] --metric GC[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,Regular,1] \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,None] \
   --convergence [200x141x100x50,1e-6,10] \
   --shrink-factors 3x2x1x1 \
   --smoothing-sigmas 1.96879525311x1.36972798346x0.936031382318x0mm \
@@ -247,7 +252,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-  --transform Affine[0.05] --metric GC[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,Regular,1] \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,None] \
   --convergence [200x141x100x50,1e-6,10] \
   --shrink-factors 3x2x1x1 \
   --smoothing-sigmas 1.96879525311x1.36972798346x0.936031382318x0mm \
@@ -322,7 +327,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[0.05] --metric GC[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,Regular,1] \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,None] \
   --convergence [200x141x100x50,1e-6,10] \
   --shrink-factors 3x2x1x1 \
   --smoothing-sigmas 1.96879525311x1.36972798346x0.936031382318x0mm \
@@ -353,7 +358,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/nonlin] \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
   --use-histogram-matching 0 \
-  --transform SyN[0.1,3,0] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,256,Regular,1] \
+  --transform SyN[0.1,3,0] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,256,None] \
   --convergence [6400x6400x6400x4670x2649x1502x852x483x274x155x88x50x25,1e-6,10] \
   --shrink-factors 8x7x6x5x4x4x3x3x2x2x2x1x1 \
   --smoothing-sigmas 7.99225592362x6.61266861862x5.47009541872x4.52358189014x3.73919975779x3.08882992473x2.54915299419x2.10081051917x1.72770579446x1.41641693281x1.15569669653x0.936031382318x0mm \
