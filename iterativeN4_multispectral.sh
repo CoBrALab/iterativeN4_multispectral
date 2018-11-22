@@ -9,7 +9,10 @@ fi
 #TODO Add setting to allow override
 tmpdir=$(mktemp -d)
 function finish {
-  rm -rf "${tmpdir}"
+  if [[ ! -n "${N4_VERBOSE:-}" ]]; then
+    rm -rf "${tmpdir}"
+  fi
+
 }
 trap finish EXIT
 
