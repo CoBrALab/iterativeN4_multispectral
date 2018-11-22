@@ -291,11 +291,9 @@ ThresholdImage 3 ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/hotmask.mnc \
 #Exclude hotspots to avoid kmeans classifying skull as brain
 ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
-ThresholdImage 3 ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/kmeans.mnc Kmeans 2 ${tmpdir}/${n}/mask_D.mnc
-ThresholdImage 3 ${tmpdir}/${n}/kmeans.mnc ${tmpdir}/${n}/weight.mnc 2 3 1 0
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/input.mnc 1
 
-ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc ${lesionmask}
+ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mask_D.mnc ${lesionmask}
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
