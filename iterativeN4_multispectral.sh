@@ -62,8 +62,20 @@ fi
 function do_N4_correct {
   #input fov mask weight maxval output bias shrink
   #Do first round of masked bias field correction, use brain mask as weight
+  local min
+  local max
+  local pct25
+  local pct75
+  local n
+  local histbins
+  min=$(mincstats -quiet -min -mask $4 -mask_range 0.0001,100000 $1)
+  max=$(mincstats -quiet -max -mask $4 -mask_range 0.0001,100000 $1)
+  n=$(mincstats -quiet -count -mask $4 -mask_range 0.0001,100000 $1)
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask $4 -mask_range 0.0001,100000 $1)
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask $4 -mask_range 0.0001,100000 $1)
+  histbins=$(python -c  "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${n})**(-1.0/3.0)) ))" )
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s $8 -w $4 -x $2 \
-    -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,200] -i $1 -o [$6,$7] -r 0
+    -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,${histbins}] -i $1 -o [$6,$7] -r 0
 
   #Normalize and rescale intensity
   ImageMath 3 $6 TruncateImageIntensity $6 0.0005 0.9995 1024 $3
