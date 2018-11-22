@@ -214,7 +214,7 @@ minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/input.mnc 
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
 
 #Register to MNI space
-antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-transforms 1 --minc  \
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1] \
@@ -243,7 +243,7 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/in
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/${n}/mnimask.mnc 4 1 ball 1
 minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/${n}/shrinkmask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
-antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-transforms 1 --minc \
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
@@ -318,7 +318,7 @@ mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
 minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
 #Affine register to MNI space, tweak registration
-antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --collapse-output-transforms 1 --minc \
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
