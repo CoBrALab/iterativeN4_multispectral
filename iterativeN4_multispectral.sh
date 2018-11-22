@@ -151,35 +151,53 @@ shrink_final_round=$(python -c "import math; print(max(2,int(math.ceil(2.0 / ( (
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 minccalc -quiet -unsigned -byte -expression 'A[0]>0?1:0' ${input} ${tmpdir}/initweight.mnc
+
 ################################################################################
 #Round 0, N4 across areas greater than 1% of mean
 ################################################################################
 n=0
 mkdir -p ${tmpdir}/${n}
 
-#Correct entire image domain
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${input} 1
-iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 3 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 4 1 ball 1
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
 
 ################################################################################
-#Round 1, N4 across areas greater than 1% of mean, repeat
+#Round 1, N4 across areas greater than 1% of mean, intersected with brainmask
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
 cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/input.mnc
 
-#Correct entire image domain
+#Correct above the 1% mean threshold
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/input.mnc 1
-iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 3 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 4 1 ball 1
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
+  --output [${tmpdir}/${n}/mni] \
+  --use-histogram-matching 0 \
+  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1] \
+  --transform Rigid[0.5] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.95] \
+  --convergence [1600x1131x800,1e-6,10] \
+  --shrink-factors 16x12x8 --smoothing-sigmas 15.9961293677x11.3082339359x7.99225592362mm \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --convergence [800x566x400,1e-6,10] \
+  --shrink-factors 8x6x4 \
+  --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --convergence [800x566x400,1e-6,10] \
+  --shrink-factors 8x6x4 \
+  --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --convergence [800x566x400,1e-6,10] \
+  --shrink-factors 8x6x4 \
+  --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm
+
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/input.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mnimask.mnc
+
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
