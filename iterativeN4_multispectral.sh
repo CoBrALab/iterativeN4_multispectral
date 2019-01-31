@@ -356,11 +356,11 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/nonlin] \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
   --use-histogram-matching 0 \
-  --transform SyN[0.1,3,0] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,256,None] \
-  --convergence [6400x6400x6400x4670x2649x1502x852x483x274x155x88x50x25,1e-6,10] \
-  --shrink-factors 8x7x6x5x4x4x3x3x2x2x2x1x1 \
-  --smoothing-sigmas 7.99225592362x6.61266861862x5.47009541872x4.52358189014x3.73919975779x3.08882992473x2.54915299419x2.10081051917x1.72770579446x1.41641693281x1.15569669653x0.936031382318x0mm \
-  --masks [${REGISTRATIONBRAINMASK},${tmpdir}/${n}/nonlinregmask.mnc]
+  --transform SyN[0.1,3,0] --metric CC[${REGISTRATIONMODEL},${tmpdir}/${n}/input.nuyl.mnc,1,2,None] \
+  --convergence [2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x675x225x75x50x25,1e-5,10] \
+  --shrink-factors 16x15x14x13x12x11x10x9x8x7x6x5x4x3x2x2x2 \
+  --smoothing-sigmas 7.99225592362x7.49173910041x6.99114831402x6.49046645078x5.98967067114x5.48872979374x4.98760009911x4.48621831264x3.98448927075x3.4822628776x2.97928762436x2.47510701762x1.96879525311x1.45813399545x0.936031382318x0.355182697615x0 \
+  --masks [${REGISTRATIONBRAINMASK},NULL]
 
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms -i ${WMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
