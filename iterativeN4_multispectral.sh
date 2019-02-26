@@ -340,9 +340,7 @@ output=${_arg_output}
 originput=${_arg_input}
 
 #Internal resampled input used for processing
-input=${tmpdir}/input.mnc
-
-
+input=${tmpdir}/t1.mnc
 
 #Function used to do bias field correction
 function do_N4_correct {
@@ -461,38 +459,38 @@ fi
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
 
 ################################################################################
-#Round 1, N4 across areas greater than 1% of mean, intersected with brainmask
+#Round 1, N4 across areas greater than 1% of mean, intersected with affine brainmask
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/input.mnc
+cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Correct above the 1% mean threshold
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/input.mnc 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 1
 
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
-  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1] \
-  --transform Rigid[0.5] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.95] \
+  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
+  --transform Rigid[0.95] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.95] \
   --convergence [1600x1131x800,1e-6,10] \
   --shrink-factors 16x12x8 \
   --smoothing-sigmas 15.9961293677x11.3082339359x7.99225592362mm \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.95] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.95] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
-  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.95] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/input.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mnimask.mnc
 
@@ -515,57 +513,57 @@ fi
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/input.mnc
-minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/denoise.mnc
-mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
+cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
 #Register to MNI space
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
-  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1] \
-  --transform Rigid[0.5] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,32,Regular,0.95] \
+  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
+  --transform Rigid[0.5] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.95] \
   --convergence [1600x1131x800,1e-6,10] \
   --shrink-factors 16x12x8 \
   --smoothing-sigmas 15.9961293677x11.3082339359x7.99225592362mm \
   --masks [NULL,NULL] \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.95] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
   --masks [NULL,NULL] \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,64,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.95] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
   --masks [${REGISTRATIONBRAINMASK},NULL] \
-  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,128,Regular,0.95] \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,128,Regular,0.95] \
   --convergence [400x283x200,1e-6,10] \
   --shrink-factors 4x3x3 \
   --smoothing-sigmas 3.98448927075x2.80644877892x1.96879525311mm \
   --masks [${REGISTRATIONBRAINMASK},NULL] \
-  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,None] \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
   --convergence [200x141x100x50,1e-6,10] \
   --shrink-factors 3x2x1x1 \
   --smoothing-sigmas 1.96879525311x1.36972798346x0.936031382318x0mm \
   --masks [${REGISTRATIONBRAINMASK},NULL]
 
 #Repeat with nuyl matched registration
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/input.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/${n}/mnimask.mnc 4 1 ball 1
-minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/${n}/shrinkmask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
+minc_nuyl ${tmpdir}/${n}/t1.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/${n}/shrinkmask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,None] \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
   --convergence [200x141x100x50,1e-6,10] \
   --shrink-factors 3x2x1x1 \
   --smoothing-sigmas 1.96879525311x1.36972798346x0.936031382318x0mm \
   --masks [${REGISTRATIONBRAINMASK},NULL]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 #BSpline[5] does weird things to intensity, clip back to positive range
 mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
@@ -582,8 +580,8 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 mincbeast ${N4_VERBOSE:+-verbose} -clobber -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 #Resample beast mask and MNI mask to native space
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/input.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/input.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
 ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
@@ -592,13 +590,13 @@ ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdi
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 3 1 ball 1
 
 #Create hotmask and exlcude hot voxels from weight
-ThresholdImage 3 ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/hotmask.mnc \
-  0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/input.mnc) 1 0
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
+  0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/t1.mnc) 1 0
 
 #Exclude hotspots to avoid kmeans classifying skull as brain
 ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/input.mnc 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 1
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
@@ -628,24 +626,24 @@ fi
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/input.mnc
-minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/denoise.mnc
-mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
+cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
-minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
+minc_nuyl ${tmpdir}/${n}/t1.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
 #Affine register to MNI space, tweak registration
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/input.mnc,1,256,None] \
+  --transform Affine[0.05] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
   --convergence [200x141x100x50,1e-6,10] \
   --shrink-factors 3x2x1x1 \
   --smoothing-sigmas 1.96879525311x1.36972798346x0.936031382318x0mm \
   --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/input.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 --float 1 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
@@ -659,8 +657,8 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 #Run a quick beast to get a brain mask
 mincbeast ${N4_VERBOSE:+-verbose} -clobber -fill -median -same_res -flip -conf ${BEAST_CONFIG2} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
-antsApplyTransforms -i ${tmpdir}/${n}/beastmask.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/bmask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
-antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/mniaffinemask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+antsApplyTransforms -i ${tmpdir}/${n}/beastmask.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/bmask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mniaffinemask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
 iMath 3 ${tmpdir}/${n}/nonlinregmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
@@ -677,11 +675,11 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --masks [${REGISTRATIONBRAINMASK},NULL]
 
 #Resample MNI Priors to Native space for classification
-antsApplyTransforms -i ${WMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
-antsApplyTransforms -i ${GMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
-antsApplyTransforms -i ${CSFPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${WMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${GMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${CSFPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
 #Masks
-antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/input.mnc -o ${tmpdir}/${n}/mnimask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
 
@@ -692,8 +690,8 @@ ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdi
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
 
 #Create hotmask
-ThresholdImage 3 ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/hotmask.mnc \
-  0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/input.mnc) 1 0
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
+  0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/t1.mnc) 1 0
 
 #Exclude lesions and such
 ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/global_exclude.mnc
@@ -741,11 +739,11 @@ while true; do
   ((++n))
   mkdir -p ${tmpdir}/${n}
 
-  cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/input.mnc
-  minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/denoise.mnc
-  mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/input.mnc
+  cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+  minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+  mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
-  minc_nuyl ${tmpdir}/${n}/input.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
+  minc_nuyl ${tmpdir}/${n}/t1.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/input.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
 
   #Resample beast mask and MNI mask to native space
   cp -f ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/mnimask.mnc
@@ -755,8 +753,8 @@ while true; do
   iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
   #Create hotmask
-  ThresholdImage 3 ${tmpdir}/${n}/input.mnc ${tmpdir}/${n}/hotmask.mnc \
-    0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/input.mnc) 1 0
+  ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
+    0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/t1.mnc) 1 0
 
   ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/global_exclude.mnc
 
