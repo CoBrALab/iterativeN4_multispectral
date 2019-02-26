@@ -281,7 +281,6 @@ if [[ ${_arg_verbose} -ge 1 || ${_arg_debug} == "on" ]]; then
   N4_VERBOSE=1
 fi
 
-#TODO Add setting to allow override
 tmpdir=$(mktemp -d)
 
 #Setup exit trap for cleanup, don't do if debug
