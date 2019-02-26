@@ -429,8 +429,13 @@ maxval=$(mincstats -max -quiet ${originput})
 
 #Isotropize, crop, clamp, and pad input volume
 isostep=1
-mincconvert -2 ${originput} ${input}
-ResampleImage 3 ${input} ${input} ${isostep}x${isostep}x${isostep} 0 4
+
+#Check if MINC1 and convert internally for a resample target
+if [[ $(file ${originput}) =~ "NetCDF" ]]; then
+  mincconvert -2 ${originput} ${tmpdir}/originput.mnc
+  originput=${tmpdir}/originput.mnc
+fi
+ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
 mv -f ${tmpdir}/input.clamp.mnc ${input}
 ImageMath 3 ${tmpdir}/cropmask.mnc ThresholdAtMean ${input} 1
