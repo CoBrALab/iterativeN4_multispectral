@@ -10,6 +10,7 @@
 # ARG_OPTIONAL_BOOLEAN([standalone],[s],[Script is run standalone so save all outputs])
 # ARG_OPTIONAL_SINGLE([max-iterations],[],[Maximum number of iterations to run],[10])
 # ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.005])
+# ARG_OPTIONAL_SINGLE([classification-prior-weight],[],[How much weight is given to prior classification proabilities during iteration],[0.25])
 # ARG_OPTIONAL_BOOLEAN([debug],[d],[Debug mode, increase verbosity further, don't cleanup])
 # ARG_VERBOSE([v])
 # ARG_POSITIONAL_SINGLE([input],[T1w scan to be corrected])
@@ -39,7 +40,7 @@ die()
 
 evaluate_strictness()
 {
-  [[ "$2" =~ ^-(-(exclude|t2|pd|config|logfile|standalone|max-iterations|convergence-threshold|debug|verbose|input|output|help)$|[eclsdvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
+  [[ "$2" =~ ^-(-(exclude|t2|pd|config|logfile|standalone|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsdvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
 }
 
 
@@ -63,6 +64,7 @@ _arg_logfile=
 _arg_standalone="off"
 _arg_max_iterations="10"
 _arg_convergence_threshold="0.005"
+_arg_classification_prior_weight="0.25"
 _arg_debug="off"
 _arg_verbose=0
 
@@ -70,7 +72,7 @@ _arg_verbose=0
 print_help()
 {
   printf '%s\n' "iterativeN4_multispectral.sh is script which performs iterative inhomogeneity (bias field) correction and classification on T1w (and optionally T2w/PDw) MRI scans"
-  printf 'Usage: %s [-e|--exclude <arg>] [--t2 <arg>] [--pd <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [--max-iterations <arg>] [--convergence-threshold <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
+  printf 'Usage: %s [-e|--exclude <arg>] [--t2 <arg>] [--pd <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
   printf '\t%s\n' "<input>: T1w scan to be corrected"
   printf '\t%s\n' "<output>: Output filename for corrected T1w (also used as basename for other outputs)"
   printf '\t%s\n' "-e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)"
@@ -81,6 +83,7 @@ print_help()
   printf '\t%s\n' "-s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)"
   printf '\t%s\n' "--max-iterations: Maximum number of iterations to run (default: '10')"
   printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.005')"
+  printf '\t%s\n' "--classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')"
   printf '\t%s\n' "-d, --debug, --no-debug: Debug mode, increase verbosity further, don't cleanup (off by default)"
   printf '\t%s\n' "-v, --verbose: Set verbose output (can be specified multiple times to increase the effect)"
   printf '\t%s\n' "-h, --help: Prints help"
@@ -187,6 +190,16 @@ parse_commandline()
       --convergence-threshold=*)
         _arg_convergence_threshold="${_key##--convergence-threshold=}"
         evaluate_strictness "$_key" "$_arg_convergence_threshold"
+        ;;
+      --classification-prior-weight)
+        test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+        _arg_classification_prior_weight="$2"
+        shift
+        evaluate_strictness "$_key" "$_arg_classification_prior_weight"
+        ;;
+      --classification-prior-weight=*)
+        _arg_classification_prior_weight="${_key##--classification-prior-weight=}"
+        evaluate_strictness "$_key" "$_arg_classification_prior_weight"
         ;;
       -d|--no-debug|--debug)
         _arg_debug="on"
@@ -702,7 +715,7 @@ fi
 
 #Do an initial classification using the MNI priors
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
-  -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.25] -k HistogramParzenWindows -m [0.1,1x1x1] \
+  -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
   -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
 
 classify_to_mask
@@ -734,7 +747,6 @@ fi
 ################################################################################
 #Remaining rounds, N4 with segmentations bootstrapped from prior run
 ################################################################################
-atropos_prior_weight=0.25
 while true; do
   ((++n))
   mkdir -p ${tmpdir}/${n}
@@ -764,7 +776,7 @@ while true; do
 
   #Do an initial classification using the last round posteriors, remove outliers
   Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.0] -a ${tmpdir}/${n}/input.nuyl.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
-    -i PriorProbabilityImages[3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${atropos_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
+    -i PriorProbabilityImages[3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
     -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
 
   classify_to_mask
