@@ -473,19 +473,19 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
-  --transform Rigid[0.95] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.95] \
+  --transform Rigid[0.5] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.5] \
   --convergence [1600x1131x800,1e-6,10] \
   --shrink-factors 16x12x8 \
   --smoothing-sigmas 15.9961293677x11.3082339359x7.99225592362mm \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.5] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
-  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.95] \
+  --transform Similarity[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.5] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm \
-  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.95] \
+  --transform Affine[0.1] --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.5] \
   --convergence [800x566x400,1e-6,10] \
   --shrink-factors 8x6x4 \
   --smoothing-sigmas 7.99225592362x5.64589716065x3.98448927075mm
