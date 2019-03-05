@@ -427,14 +427,14 @@ fi
 #Find maximum value of scan to rescale to for final output
 maxval=$(mincstats -max -quiet ${originput})
 
+#Forceably convert to MINC2, and clamp range to avoid negative numbers
+mincconvert -2 ${originput} ${tmpdir}/originput.mnc
+mincmath -quiet -clamp -const2 0 ${maxval} ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
+mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
+originput=${tmpdir}/originput.mnc
+
 #Isotropize, crop, clamp, and pad input volume
 isostep=1
-
-#Check if MINC1 and convert internally for a resample target
-if [[ $(file ${originput}) =~ "NetCDF" ]]; then
-  mincconvert -2 ${originput} ${tmpdir}/originput.mnc
-  originput=${tmpdir}/originput.mnc
-fi
 ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
 mv -f ${tmpdir}/input.clamp.mnc ${input}
