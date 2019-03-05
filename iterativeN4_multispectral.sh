@@ -729,7 +729,7 @@ fi
 #Do an initial classification using the MNI priors
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [10,0] -a ${tmpdir}/${n}/t1.nuyl.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
   -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
-  -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
+  -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[0.69314718055994530942,1] -l 2[0.69314718055994530942,1] -l 3[0.69314718055994530942,1]
 
 classify_to_mask
 
@@ -790,7 +790,8 @@ while true; do
   #Do an initial classification using the last round posteriors, remove outliers
   Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.0] -a ${tmpdir}/${n}/t1.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
-    -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 1[1,1] -l 2[1,1] -l 3[1,1]
+    -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot \
+    -l 1[0.69314718055994530942,1] -l 2[0.69314718055994530942,1] -l 3[0.69314718055994530942,1]
 
   classify_to_mask
 
