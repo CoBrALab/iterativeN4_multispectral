@@ -816,7 +816,7 @@ while true; do
   fi
 
   # Maximum number of iterations is 10, CV difference less than 0.005
-  [[ (${n} -lt ${_arg_max_iterations}) && ($(python -c "print $(tail -1 ${tmpdir}/convergence.txt) > ${_arg_convergence_threshold}") == "True") ]] || break
+  [[ (${n} -lt ${_arg_max_iterations}) && ($(python -c "print($(tail -1 ${tmpdir}/convergence.txt) > ${_arg_convergence_threshold})") == "True") ]] || break
 
 done
 
