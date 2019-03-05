@@ -736,15 +736,12 @@ classify_to_mask
 
 #Combine GM and WM proabability images into a N4 mask,
 ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classifymask.mnc
-ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/primary_weight.mnc 0 1
+ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/weight.mnc 0 1
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/primary_weight.mnc ${excludemask}
 fi
 
-cleanup_posteriors
 do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
 if (( ${#multispectral_inputs[@]} > 0 )); then
@@ -796,15 +793,12 @@ while true; do
 
   #Combine GM and WM probably images into a N4 mask,
   ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
-  ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classifymask.mnc
-  ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
-  ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/primary_weight.mnc 0 1
+  ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/weight.mnc 0 1
 
   if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/primary_weight.mnc ${excludemask}
   fi
 
-  cleanup_posteriors
   do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
   #Loop over multispectral inputs
