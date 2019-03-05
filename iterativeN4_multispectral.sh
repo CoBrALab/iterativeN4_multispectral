@@ -773,7 +773,7 @@ while true; do
 
   #Combine the masks because sometimes beast misses badly biased cerebellum
   cp -f ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/${n}/mask.mnc
-  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
+  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
 
   #Create hotmask
   ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
