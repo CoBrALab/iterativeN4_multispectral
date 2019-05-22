@@ -468,7 +468,7 @@ n=0
 
 mkdir -p ${tmpdir}/${n}
 
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${input} 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${input} 0.5
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
@@ -485,7 +485,7 @@ mkdir -p ${tmpdir}/${n}
 cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Correct above the 1% mean threshold
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   --output [${tmpdir}/${n}/mni] \
