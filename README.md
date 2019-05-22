@@ -23,3 +23,7 @@ and any programs which can have progress reported will executed as such.
 If the environment variable `N4_STANDALONE` is set, `iterativeN4_multispectral.sh`
 will save the final outputs from the internal posteriors in addition to the corrected
 file (masks and classification)
+
+# Getting Priors
+
+This pipeline uses the priors available from the MNI at http://nist.mni.mcgill.ca/?page_id=714
