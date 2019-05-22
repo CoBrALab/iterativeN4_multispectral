@@ -483,6 +483,8 @@ do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir
 mkdir -p ${tmpdir}/${n}
 
 cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
 #Correct above the 1% mean threshold
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
