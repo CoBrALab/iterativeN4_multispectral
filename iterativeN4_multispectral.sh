@@ -790,7 +790,8 @@ while true; do
   #Do an initial classification using the last round posteriors, remove outliers
   Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.0] -a ${tmpdir}/${n}/t1.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
-    -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot
+    -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Socrates[0] --winsorize-outliers BoxPlot
+
   classify_to_mask
 
   #Combine GM and WM probably images into a N4 mask,
