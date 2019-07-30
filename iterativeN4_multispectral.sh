@@ -584,7 +584,6 @@ mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpd
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink the MNI mask for the first intensity matching
-rm -f ${tmpdir}/${n}/shrinkmask.mnc
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 4 1 ball 1
 
 #Intensity normalize
@@ -601,7 +600,7 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [$
 ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
 
 #Expand the mask a bit
-iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 3 1 ball 1
+iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
 
 #Create hotmask and exlcude hot voxels from weight
 ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
@@ -704,10 +703,10 @@ antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericA
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
-ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mniaffinemask.mnc
 
 #Expand the mask a bit
-iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
+iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
 #Create hotmask
 ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
@@ -760,8 +759,8 @@ while true; do
   mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
   #Combine the masks because sometimes beast misses badly biased cerebellum
-  cp -f ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/${n}/mask.mnc
-  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
+  ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc
+  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
   #Create hotmask
   ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
