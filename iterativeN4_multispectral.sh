@@ -429,7 +429,7 @@ if (( ${#multispectral_inputs[@]} > 0 )); then
 fi
 
 #Find maximum value of scan to rescale to for final output
-maxval=$(mincstats -max -quiet ${originput})
+maxval=$(mincstats -pctT 99.99 -quiet ${originput})
 
 #Forceably convert to MINC2, and clamp range to avoid negative numbers
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
