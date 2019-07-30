@@ -374,6 +374,10 @@ function do_N4_correct {
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s $8 -w $4 -x $2 \
     -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,${histbins}] -i $1 -o [$6,$7] -r 0
 
+  #Demean bias field estimate and recorrect file
+  ImageMath 3 $7 / $7 $(mincstats -quiet -mean $7)
+  ImageMath 3 $6 / $1 $7
+
   #Normalize and rescale intensity
   ImageMath 3 $6 TruncateImageIntensity $6 0.0005 0.9995 1024 $3
   ImageMath 3 $6 RescaleImage $6 0 $5
