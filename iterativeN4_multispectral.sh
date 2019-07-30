@@ -8,6 +8,7 @@
 # ARG_OPTIONAL_SINGLE([config],[c],[Path to an alternative config file defining priors to use])
 # ARG_OPTIONAL_SINGLE([logfile],[l],[Path to file to log all output])
 # ARG_OPTIONAL_BOOLEAN([standalone],[s],[Script is run standalone so save all outputs])
+# ARG_OPTIONAL_BOOLEAN([autocrop],[a],[Crop the final output to 20 mm around the brain mask])
 # ARG_OPTIONAL_SINGLE([max-iterations],[],[Maximum number of iterations to run],[10])
 # ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.005])
 # ARG_OPTIONAL_SINGLE([classification-prior-weight],[],[How much weight is given to prior classification proabilities during iteration],[0.25])
@@ -40,13 +41,13 @@ die()
 
 evaluate_strictness()
 {
-  [[ "$2" =~ ^-(-(exclude|t2|pd|config|logfile|standalone|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsdvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
+  [[ "$2" =~ ^-(-(exclude|t2|pd|config|logfile|standalone|autocrop|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsadvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
 }
 
 
 begins_with_short_option()
 {
-  local first_option all_short_options='eclsdvh'
+  local first_option all_short_options='eclsadvh'
   first_option="${1:0:1}"
   test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -62,6 +63,7 @@ _arg_pd=
 _arg_config=
 _arg_logfile=
 _arg_standalone="off"
+_arg_autocrop="off"
 _arg_max_iterations="10"
 _arg_convergence_threshold="0.005"
 _arg_classification_prior_weight="0.25"
@@ -72,7 +74,7 @@ _arg_verbose=0
 print_help()
 {
   printf '%s\n' "iterativeN4_multispectral.sh is script which performs iterative inhomogeneity (bias field) correction and classification on T1w (and optionally T2w/PDw) MRI scans"
-  printf 'Usage: %s [-e|--exclude <arg>] [--t2 <arg>] [--pd <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
+  printf 'Usage: %s [-e|--exclude <arg>] [--t2 <arg>] [--pd <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
   printf '\t%s\n' "<input>: T1w scan to be corrected"
   printf '\t%s\n' "<output>: Output filename for corrected T1w (also used as basename for other outputs)"
   printf '\t%s\n' "-e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)"
@@ -81,6 +83,7 @@ print_help()
   printf '\t%s\n' "-c, --config: Path to an alternative config file defining priors to use (no default)"
   printf '\t%s\n' "-l, --logfile: Path to file to log all output (no default)"
   printf '\t%s\n' "-s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)"
+  printf '\t%s\n' "-a, --autocrop, --no-autocrop: Crop the final output to 20 mm around the brain mask (off by default)"
   printf '\t%s\n' "--max-iterations: Maximum number of iterations to run (default: '10')"
   printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.005')"
   printf '\t%s\n' "--classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')"
@@ -169,6 +172,18 @@ parse_commandline()
         if test -n "$_next" -a "$_next" != "$_key"
         then
           { begins_with_short_option "$_next" && shift && set -- "-s" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
+        fi
+        ;;
+      -a|--no-autocrop|--autocrop)
+        _arg_autocrop="on"
+        test "${1:0:5}" = "--no-" && _arg_autocrop="off"
+        ;;
+      -a*)
+        _arg_autocrop="on"
+        _next="${_key##-a}"
+        if test -n "$_next" -a "$_next" != "$_key"
+        then
+          { begins_with_short_option "$_next" && shift && set -- "-a" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
         fi
         ;;
       --max-iterations)
@@ -813,6 +828,15 @@ cat ${tmpdir}/convergence.txt
 #Transform all the working files into the original input space
 mincresample -like ${originput} ${tmpdir}/${n}/primary_weight.mnc ${tmpdir}/finalweight.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
+
+#If cropping is enabled, recrop the originput file and resample the mask again
+if [[ ${_arg_autocrop} == "on" ]]; then
+  autocrop -bbox ${tmpdir}/finalmask.mnc -isoexpand 20mm ${originput} ${tmpdir}/originput.crop.mnc
+  mv -f ${tmpdir}/originput.crop.mnc ${originput}
+  mincresample -clobber -like ${originput} ${tmpdir}/${n}/primary_weight.mnc ${tmpdir}/finalweight.mnc
+  antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
+fi
+
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalclassifymask.mnc -r ${originput} -n GenericLabel
