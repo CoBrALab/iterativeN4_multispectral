@@ -483,7 +483,7 @@ do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir
 mkdir -p ${tmpdir}/${n}
 
 cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
 #Correct above the 1% mean threshold
@@ -536,7 +536,7 @@ fi
 mkdir -p ${tmpdir}/${n}
 
 cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
 #Register to MNI space
@@ -650,7 +650,7 @@ fi
 mkdir -p ${tmpdir}/${n}
 
 cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
 minc_nuyl ${tmpdir}/${n}/t1.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/t1.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
@@ -765,7 +765,7 @@ while true; do
   mkdir -p ${tmpdir}/${n}
 
   cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-  minc_anlm --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
+  minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
   mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
   minc_nuyl ${tmpdir}/${n}/t1.mnc ${RESAMPLEMODEL} ${tmpdir}/${n}/t1.nuyl.mnc --source-mask ${tmpdir}/$((n - 1))/mask.mnc --target-mask ${RESAMPLEMODELBRAINMASK} --cut-off 0 --fix_zero_padding --steps 1024
