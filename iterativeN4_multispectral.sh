@@ -859,6 +859,8 @@ if [[ ${_arg_standalone} == "on" ]]; then
   cp -f ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename ${output} .mnc).classifymask.mnc
   cp -f ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
   cp -f ${tmpdir}/finalmask.mnc $(dirname $output)/$(basename ${output} .mnc).mask.mnc
+  minccalc -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
+  autocrop -bbox ${tmpdir}/finalmask.mnc -isoexpand 10mm ${tmpdir}/output.extracted.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc
 fi
 
 if [[ ${_arg_debug} == "off" ]]; then
