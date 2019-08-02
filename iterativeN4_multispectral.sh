@@ -293,6 +293,7 @@ assign_positional_args 1 "${_positionals[@]}"
 IFS=$'\n\t'
 set -euo pipefail
 
+#Special trick to redirect all output within script into logfile
 if [[ -n ${_arg_logfile} ]]; then
   exec >  >(tee -ia ${_arg_logfile})
   exec 2> >(tee -ia ${_arg_logfile} >&2)
@@ -309,6 +310,7 @@ if [[ ${_arg_verbose} -ge 1 || ${_arg_debug} == "on" ]]; then
   N4_VERBOSE=1
 fi
 
+#Create temporary directory for work
 tmpdir=$(mktemp -d)
 
 #Setup exit trap for cleanup, don't do if debug
@@ -319,7 +321,6 @@ function finish {
 
 }
 trap finish EXIT
-
 
 #Set local parallelism inherited from QBATCH
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=${THREADS_PER_COMMAND:-$(nproc)}
@@ -346,7 +347,7 @@ RESAMPLEMODELBRAINMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_mi
 
 # Check config files, eventually argbash will do this
 if [[ -n ${_arg_config} ]]; then
-  if [[ -r  ${_arg_config} ]]; then
+  if [[ -r ${_arg_config} ]]; then
     source ${_arg_config}
   else
     echo "iterativeN4_multispectral.sh ERROR: config file does not exist or is not readable" && exit 2
@@ -422,6 +423,7 @@ function classify_to_mask {
 
 }
 
+#Cleanup any small bits of weird classification
 function cleanup_posteriors {
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class2.mnc 2 2 1 0
@@ -433,9 +435,11 @@ function cleanup_posteriors {
   done
 }
 
-multispectral_inputs=()
+
 
 #Generate list of extra Atropos inputs for multispectral segmentation
+#Disabled for now
+multispectral_inputs=()
 multispectral_atropos_inputs=""
 if (( ${#multispectral_inputs[@]} > 0 )); then
   for file in "${multispectral_inputs[@]}"; do
@@ -470,7 +474,7 @@ else
   excludemask=""
 fi
 
-#Compute final round shink factor for N4
+#Compute final round shink factor for N4 to always be the same resolution
 dx=$(mincinfo -attvalue xspace:step ${originput})
 dy=$(mincinfo -attvalue yspace:step ${originput})
 dz=$(mincinfo -attvalue zspace:step ${originput})
@@ -478,15 +482,15 @@ shrink_final_round=$(python -c "import math; print(max(2,int(math.ceil(2.0 / ( (
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
-minccalc -quiet -unsigned -byte -expression 'A[0]>0?1:0' ${input} ${tmpdir}/initweight.mnc
 
 ################################################################################
-#Round 0, N4 across areas greater than 1% of mean
+#Round 0, N4 across areas greater than 0.5% of mean
 ################################################################################
 n=0
 
 mkdir -p ${tmpdir}/${n}
 
+#Initial threshold of greater than 0.5 of mean intensity
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${input} 0.5
 
 if [[ -n ${excludemask} ]]; then
@@ -496,7 +500,7 @@ fi
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
 
 ################################################################################
-#Round 1, N4 across areas greater than 1% of mean, intersected with affine brainmask
+#Round 1, N4 across areas greater than 0.5% of mean, intersected with affine brainmask
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -505,10 +509,11 @@ cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
-#Correct above the 1% mean threshold
+#Correct above the 0.5% mean threshold
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 
-antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
+#First try registration to MNI space with no masks
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
@@ -517,36 +522,35 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
   	--convergence [2025x2025x2025,1e-6,10] \
   	--shrink-factors 16x8x4 \
   	--smoothing-sigmas 13.5891488046x6.7945744023x3.39728720115mm \
-  	--masks [NULL,NULL] \
   --transform Rigid[0.25] \
   	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
   	--convergence [2025x2025x2025,1e-6,10] \
   	--shrink-factors 8x4x2 \
   	--smoothing-sigmas 6.7945744023x3.39728720115x1.69864360058mm \
-  	--masks [NULL,NULL] \
   --transform Similarity[0.125] \
   	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
   	--convergence [2025x2025x750,1e-6,10] \
   	--shrink-factors 4x2x1 \
   	--smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288mm \
-  	--masks [NULL,NULL] \
   --transform Affine[0.1] \
   	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
   	--convergence [2025x750x433,1e-6,10] \
   	--shrink-factors 2x1x1 \
-  	--smoothing-sigmas 1.69864360058x0.849321800288x0.424660900144mm \
-  	--masks [NULL,NULL]
+  	--smoothing-sigmas 1.69864360058x0.849321800288x0.424660900144mm
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3  -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
+#Intersect 0.5% weight and MNI affine mask
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mnimask.mnc
 
+#User provided exclusion mask
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
+#Calculate coeffcient of variation between this round bias field and prior round
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
@@ -565,7 +569,7 @@ minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t
 mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
 
 #Register to MNI space
-antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc  \
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
@@ -626,7 +630,6 @@ ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}
 
 ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Otsu 1
 
-
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
@@ -671,7 +674,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   	--smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288x0.424660900144x0mm \
     --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3  -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
@@ -739,6 +742,7 @@ Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [10,0] -a 
   -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
   -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 2[0.69314718055994530942,1] -l 3[0.69314718055994530942,1]
 
+#Convert classification to the mask
 classify_to_mask
 
 #Combine GM and WM proabability images into a N4 mask,
