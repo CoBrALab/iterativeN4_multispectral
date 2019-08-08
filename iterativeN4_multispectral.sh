@@ -379,30 +379,42 @@ input=${tmpdir}/t1.mnc
 
 #Function used to do bias field correction
 function do_N4_correct {
-  #input fov mask weight maxval output bias shrink
-  #Do first round of masked bias field correction, use brain mask as weight
+  #input fov mask weight output bias shrink
+  local n4input=$1
+  local n4initmask=$2
+  local n4brainmask=$3
+  local n4weight=$4
+  local n4corrected=$5
+  local n4bias=$6
+  local n4shrink=$7
+
   local min
   local max
   local pct25
   local pct75
   local n
   local histbins
-  min=$(mincstats -quiet -min -mask $4 -mask_range 0.0001,inf $1)
-  max=$(mincstats -quiet -max -mask $4 -mask_range 0.0001,inf $1)
-  n=$(mincstats -quiet -count -mask $4 -mask_range 0.0001,inf $1)
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask $4 -mask_range 0.0001,inf $1)
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask $4 -mask_range 0.0001,inf $1)
-  histbins=$(python -c  "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${n})**(-1.0/3.0)) ))" )
-  N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s $8 -w $4 -x $2 \
-    -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,${histbins}] -i $1 -o [$6,$7] -r 0
+
+  #Calculate bins for N4 with Freedman-Diaconis’s Rule
+  min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
+  max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
+  n=$(mincstats -quiet -count -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
+  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${n})**(-1.0/3.0)) ))" )
+
+  N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
+    -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,${histbins}] \
+    -i ${n4input} \
+    -o [${n4corrected},${n4bias}] -r 0
 
   #Demean bias field estimate and recorrect file
-  ImageMath 3 $7 / $7 $(mincstats -quiet -mean $7)
-  ImageMath 3 $6 / $1 $7
+  ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean ${n4bias})
+  ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
 
   #Normalize and rescale intensity
-  ImageMath 3 $6 TruncateImageIntensity $6 0.0005 0.9995 1024 $3
-  ImageMath 3 $6 RescaleImage $6 0 $5
+  ImageMath 3 ${n4corrected} TruncateImageIntensity ${n4corrected} 0.0005 0.9995 1024 ${n4brainmask}
+  ImageMath 3 ${n4corrected} RescaleImage ${n4corrected} 0 ${maxval}
 }
 
 #Convert classify image into a mask
