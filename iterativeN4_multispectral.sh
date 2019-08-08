@@ -441,20 +441,6 @@ function classify_to_mask {
 
 }
 
-#Cleanup any small bits of weird classification
-function cleanup_posteriors {
-  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
-  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class2.mnc 2 2 1 0
-  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class1.mnc 1 1 1 0
-  for num in 1 2 3; do
-    ImageMath 3 ${tmpdir}/${n}/class${num}.mnc GetLargestComponent ${tmpdir}/${n}/class${num}.mnc
-    ImageMath 3 ${tmpdir}/${n}/SegmentationPosteriors${num}.mnc m ${tmpdir}/${n}/SegmentationPosteriors${num}.mnc ${tmpdir}/${n}/class${num}.mnc
-    ImageMath 3 ${tmpdir}/${n}/SegmentationPosteriors${num}.mnc m ${tmpdir}/${n}/SegmentationPosteriors${num}.mnc ${tmpdir}/${n}/classifymask.mnc
-  done
-}
-
-
-
 #Generate list of extra Atropos inputs for multispectral segmentation
 #Disabled for now
 multispectral_inputs=()
