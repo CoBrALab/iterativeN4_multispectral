@@ -508,14 +508,20 @@ n=0
 
 mkdir -p ${tmpdir}/${n}
 
+minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
+
 #Initial threshold of greater than 0.5 of mean intensity
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${input} 0.5
+ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
+#Always exclude 0 from correction
+minccalc -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
 
 ################################################################################
 #Round 1, N4 across areas greater than 0.5% of mean, intersected with affine brainmask
