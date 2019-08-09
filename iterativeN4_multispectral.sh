@@ -3,8 +3,6 @@
 # Created by argbash-init v2.8.0
 # Rearrange the order of options below according to what you would like to see in the help message.
 # ARG_OPTIONAL_SINGLE([exclude],[e],[Mask file defining regions to exclude from classifcation, region is still corrected])
-# ARG_OPTIONAL_SINGLE([t2],[],[T2w scan, will be rigidly registered to T1w and used for classification])
-# ARG_OPTIONAL_SINGLE([pd],[],[PDw scan, will be rigidly registered to T1w and used for classification])
 # ARG_OPTIONAL_SINGLE([config],[c],[Path to an alternative config file defining priors to use])
 # ARG_OPTIONAL_SINGLE([logfile],[l],[Path to file to log all output])
 # ARG_OPTIONAL_BOOLEAN([standalone],[s],[Script is run standalone so save all outputs])
@@ -41,7 +39,7 @@ die()
 
 evaluate_strictness()
 {
-  [[ "$2" =~ ^-(-(exclude|t2|pd|config|logfile|standalone|autocrop|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsadvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
+  [[ "$2" =~ ^-(-(exclude|config|logfile|standalone|autocrop|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsadvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
 }
 
 
@@ -58,8 +56,6 @@ _arg_input=
 _arg_output=
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_exclude=
-_arg_t2=
-_arg_pd=
 _arg_config=
 _arg_logfile=
 _arg_standalone="off"
@@ -74,12 +70,10 @@ _arg_verbose=0
 print_help()
 {
   printf '%s\n' "iterativeN4_multispectral.sh is script which performs iterative inhomogeneity (bias field) correction and classification on T1w (and optionally T2w/PDw) MRI scans"
-  printf 'Usage: %s [-e|--exclude <arg>] [--t2 <arg>] [--pd <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
+  printf 'Usage: %s [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
   printf '\t%s\n' "<input>: T1w scan to be corrected"
   printf '\t%s\n' "<output>: Output filename for corrected T1w (also used as basename for other outputs)"
   printf '\t%s\n' "-e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)"
-  printf '\t%s\n' "--t2: T2w scan, will be rigidly registered to T1w and used for classification (no default)"
-  printf '\t%s\n' "--pd: PDw scan, will be rigidly registered to T1w and used for classification (no default)"
   printf '\t%s\n' "-c, --config: Path to an alternative config file defining priors to use (no default)"
   printf '\t%s\n' "-l, --logfile: Path to file to log all output (no default)"
   printf '\t%s\n' "-s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)"
@@ -113,26 +107,6 @@ parse_commandline()
       -e*)
         _arg_exclude="${_key##-e}"
         evaluate_strictness "$_key" "$_arg_exclude"
-        ;;
-      --t2)
-        test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-        _arg_t2="$2"
-        shift
-        evaluate_strictness "$_key" "$_arg_t2"
-        ;;
-      --t2=*)
-        _arg_t2="${_key##--t2=}"
-        evaluate_strictness "$_key" "$_arg_t2"
-        ;;
-      --pd)
-        test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-        _arg_pd="$2"
-        shift
-        evaluate_strictness "$_key" "$_arg_pd"
-        ;;
-      --pd=*)
-        _arg_pd="${_key##--pd=}"
-        evaluate_strictness "$_key" "$_arg_pd"
         ;;
       -c|--config)
         test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -441,16 +415,6 @@ function classify_to_mask {
 
 }
 
-#Generate list of extra Atropos inputs for multispectral segmentation
-#Disabled for now
-multispectral_inputs=()
-multispectral_atropos_inputs=""
-if (( ${#multispectral_inputs[@]} > 0 )); then
-  for file in "${multispectral_inputs[@]}"; do
-    multispectral_atropos_inputs+="-a ${tmpdir}/multispectral/$(basename $file .mnc).N4.mnc "
-  done
-fi
-
 #Find maximum value of scan to rescale to for final output
 maxval=$(mincstats -pctT 99.99 -quiet ${originput})
 
@@ -648,12 +612,6 @@ ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpd
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
-#Align multispectral inputs into T1 space
-if (( ${#multispectral_inputs[@]} > 0 )); then
-  echo "Needs to be reimplemented"
-else
-  cp -f ${tmpdir}/initweight.mnc ${tmpdir}/global_exclude.mnc
-fi
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
@@ -748,7 +706,7 @@ if [[ -n ${excludemask} ]]; then
 fi
 
 #Do an initial classification using the MNI priors
-Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [10,0] -a ${tmpdir}/${n}/t1.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
+Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [25,0.001] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
   -i PriorProbabilityImages[3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
   -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Aristotle[0] --winsorize-outliers BoxPlot -l 2[0.69314718055994530942,1] -l 3[0.69314718055994530942,1]
 
@@ -765,9 +723,6 @@ fi
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
-if (( ${#multispectral_inputs[@]} > 0 )); then
-  echo "Need to implement"
-fi
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
@@ -802,7 +757,7 @@ while true; do
   fi
 
   #Do an initial classification using the last round posteriors, remove outliers
-  Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.0] -a ${tmpdir}/${n}/t1.mnc ${multispectral_atropos_inputs} -s 1x2 -s 2x3 \
+  Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [5,0.001] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${_arg_classification_prior_weight}] -k HistogramParzenWindows -m [0.1,1x1x1] \
     -o [${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc] -r 1 -p Socrates[0] --winsorize-outliers BoxPlot
 
@@ -861,9 +816,6 @@ minccalc -quiet -unsigned -byte -expression 'A[0]?1:1' ${originput} ${tmpdir}/or
 
 do_N4_correct ${originput} ${tmpdir}/originitmask.mnc ${tmpdir}/finalmask.mnc ${tmpdir}/finalweight.mnc ${maxval} ${tmpdir}/corrected.mnc ${tmpdir}/bias.mnc ${shrink_final_round}
 
-if (( ${#multispectral_inputs[@]} > 0 )); then
-  echo "Need to implement"
-fi
 
 cp -f ${tmpdir}/corrected.mnc ${output}
 
