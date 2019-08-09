@@ -867,7 +867,7 @@ fi
 
 cp -f ${tmpdir}/corrected.mnc ${output}
 
-if [[ ${_arg_standalone} == "on" ]]; then
+if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   cp -f ${tmpdir}/finalbmask.mnc $(dirname ${output})/$(basename ${output} .mnc).beastmask.mnc
   cp -f ${tmpdir}/finalmnimask.mnc $(dirname ${output})/$(basename ${output} .mnc).mnimask.mnc
   cp -f ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename ${output} .mnc).classifymask.mnc
