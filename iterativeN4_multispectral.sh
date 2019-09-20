@@ -370,11 +370,11 @@ function do_N4_correct {
   local histbins
 
   #Calculate bins for N4 with Freedman-Diaconis’s Rule
-  min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
-  max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
-  n=$(mincstats -quiet -count -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${n4weight} -mask_range 0.0001,inf ${n4input})
+  min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  n=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${n})**(-1.0/3.0)) ))" )
 
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
