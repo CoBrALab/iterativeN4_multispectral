@@ -431,7 +431,7 @@ ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
 mv -f ${tmpdir}/input.clamp.mnc ${input}
 ImageMath 3 ${tmpdir}/cropmask.mnc ThresholdAtMean ${input} 1
-autocrop -bbox ${tmpdir}/cropmask.mnc -isoexpand 10mm ${input} ${tmpdir}/input.crop.mnc
+ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/cropmask.mnc 1 10
 mv -f ${tmpdir}/input.crop.mnc ${input}
 
 #If lesion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
@@ -801,7 +801,7 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o 
 
 #If cropping is enabled, recrop the originput file and resample the mask again
 if [[ ${_arg_autocrop} == "on" ]]; then
-  autocrop -bbox ${tmpdir}/finalmask.mnc -isoexpand 20mm ${originput} ${tmpdir}/originput.crop.mnc
+  ExtractRegionFromImageByMask 3 ${originput} ${tmpdir}/originput.crop.mnc ${tmpdir}/finalmask.mnc 1 25
   mv -f ${tmpdir}/originput.crop.mnc ${originput}
   mincresample -clobber -like ${originput} ${tmpdir}/${n}/primary_weight.mnc ${tmpdir}/finalweight.mnc
   antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
@@ -827,7 +827,7 @@ if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   cp -f ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
   cp -f ${tmpdir}/finalmask.mnc $(dirname $output)/$(basename ${output} .mnc).mask.mnc
   minccalc -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
-  autocrop -bbox ${tmpdir}/finalmask.mnc -isoexpand 10mm ${tmpdir}/output.extracted.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc
+  ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc ${tmpdir}/finalmask.mnc 1 10
 fi
 
 if [[ ${_arg_debug} == "off" ]]; then
