@@ -847,6 +847,7 @@ while true; do
     -l [0.69314718055994530942,1]
 
   classify_to_mask
+  outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/hotmask.mnc
 
   #Combine GM and WM probably images into a N4 mask,
   ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
