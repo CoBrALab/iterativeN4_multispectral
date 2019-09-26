@@ -675,7 +675,7 @@ outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmas
 ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Do a quick kmeans to get gm/wm and make a hard mask for weight
-ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/mask.mnc
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/kmeansmask.mnc
 ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 2 3 1 0
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
