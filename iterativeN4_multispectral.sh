@@ -560,7 +560,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
 ################################################################################
 #Round 1, N4 across areas greater than 0.5% of mean, intersected with affine brainmask
@@ -688,8 +688,8 @@ fi
 
 ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mask_D.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
@@ -790,8 +790,8 @@ if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/primary_weight.mnc ${excludemask}
 fi
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
 minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
@@ -832,12 +832,8 @@ while true; do
     ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/primary_weight.mnc ${excludemask}
   fi
 
-  do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
-  #Loop over multispectral inputs
-  if (( ${#multispectral_inputs[@]} > 0 )); then
-    echo "Need to implement"
-  fi
+  do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
   #Compute coeffcient of variation
   minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
