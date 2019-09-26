@@ -440,22 +440,28 @@ function classify_to_mask {
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class2.mnc 2 2 1 0
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class1.mnc 1 1 1 0
+  #Get largest component
   ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
   ImageMath 3 ${tmpdir}/${n}/class2.mnc GetLargestComponent ${tmpdir}/${n}/class2.mnc
-  iMath 3 ${tmpdir}/${n}/class1.mnc ME ${tmpdir}/${n}/class1.mnc 1 1 box 1
-  ImageMath 3 ${tmpdir}/${n}/class1.mnc GetLargestComponent ${tmpdir}/${n}/class1.mnc
-  iMath 3 ${tmpdir}/${n}/class1.mnc MD ${tmpdir}/${n}/class1.mnc 1 1 ball 1
 
-  #Reconstruct a closed mask from the classification
-  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/class2.mnc ${tmpdir}/${n}/class3.mnc
-  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/class1.mnc
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 2 1 ball 1
+  #Fill holes in GM
+  ImageMath 3 ${tmpdir}/${n}/class2.mnc FillHoles ${tmpdir}/${n}/class2.mnc 2
+
+  #Erode CSF to just get any minimal ventical voxels
+  ImageMath 3 ${tmpdir}/${n}/class1.mnc ME ${tmpdir}/${n}/class1.mnc 10
+
+  #ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/bmask.mnc ${tmpdir}/mnimask.mnc
+  cp -f ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc
+
+  mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -labels -or ${tmpdir}/${n}/class2.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/class1.mnc \
+    ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/classifymask2.mnc
+  mv -f ${tmpdir}/${n}/classifymask2.mnc ${tmpdir}/${n}/classifymask.mnc
+
+  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 2
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc GetLargestComponent ${tmpdir}/${n}/classifymask.mnc
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 3 1 ball 1
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc MC ${tmpdir}/${n}/classifymask.mnc 5 1 ball 1
-  ImageMath 3  ${tmpdir}/${n}/classifymask.mnc m ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/hotmask.mnc
+  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 4
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
-
+  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
 
 #Find maximum value of scan to rescale to for final output
@@ -758,17 +764,10 @@ antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericA
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
-ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mniaffinemask.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
 
 #Expand the mask a bit
-iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
-
-#Create hotmask
-ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
-  0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/t1.mnc) 1 0
-
-#Exclude lesions and such
-ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/global_exclude.mnc
+iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 box 1
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
@@ -810,14 +809,8 @@ while true; do
   minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
   #Combine the masks because sometimes beast misses badly biased cerebellum
-  ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc
-  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
-
-  #Create hotmask
-  ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
-    0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/t1.mnc) 1 0
-
-  ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/global_exclude.mnc
+  cp -f ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/${n}/mask.mnc
+  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 box 1
 
   if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
