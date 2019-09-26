@@ -570,10 +570,7 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
-#Correct above the 0.5% mean threshold
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
-
-#First try registration to MNI space with no masks
+#First try registration to MNI space, multistep
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
@@ -593,15 +590,31 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
-#Intersect 0.5% weight and MNI affine mask
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mnimask.mnc
+#Generate a hotmask using the existing weight mask
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/hotmask.mnc
+
+#Do a quick kmeans to get gm/wm and make a hard mask for weight
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/kmeansmask.mnc
+ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 2 3 1 0
+iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 
 #User provided exclusion mask
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
+#Remove outliers
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+
+#Always exclude 0 from correction
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
 #Calculate coeffcient of variation between this round bias field and prior round
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
