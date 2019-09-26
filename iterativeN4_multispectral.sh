@@ -816,7 +816,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
-minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
@@ -871,7 +871,7 @@ while true; do
   do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
   #Compute coeffcient of variation
-  minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
   python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
   if [[ ${_arg_debug} == "off" ]]; then
