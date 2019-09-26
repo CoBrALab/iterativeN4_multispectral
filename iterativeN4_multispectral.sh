@@ -549,6 +549,7 @@ mv -f ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/${n}/t1.mnc
 #Initial threshold of greater than 0.5 of mean intensity
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 
+#Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
@@ -879,7 +880,7 @@ while true; do
     rm -rf ${tmpdir}/$((n - 1))
   fi
 
-  # Maximum number of iterations is 10, CV difference less than 0.005
+  # Break if greater than iterations or less than convergence threshold
   [[ (${n} -lt ${_arg_max_iterations}) && ($(python -c "print($(tail -1 ${tmpdir}/convergence.txt) > ${_arg_convergence_threshold})") == "True") ]] || break
 
 done
