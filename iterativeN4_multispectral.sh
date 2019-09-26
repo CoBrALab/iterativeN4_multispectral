@@ -352,6 +352,33 @@ originput=${_arg_input}
 #Internal resampled input used for processing
 input=${tmpdir}/t1.mnc
 
+#Quick awk math function
+calc(){ awk "BEGIN { print "$*" }"; }
+
+#Function for generating an outlier mask based on >3xIQR
+#Mostly for excluding blood vessels when T1 was tuned improperly
+function outlier_mask {
+  #Generate an outlier mask as median+3*IQR
+  local outlier_input=$1
+  local outlier_mask=$2
+  local outlier_output=$3
+
+  local median
+  local pct25
+  local pct75
+  local threshold
+
+  ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
+  median=$(mincstats -quiet -median -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  threshold=$(calc "${median}+3*(${pct75}-${pct25})")
+
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>${threshold}?1:0" ${outlier_input} ${outlier_output}
+  mincdefrag ${outlier_output} $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc 1 6 1
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]?0:1" $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc ${outlier_output}
+}
+
 #Function used to do bias field correction
 function do_N4_correct {
   #input fov mask weight output bias shrink
