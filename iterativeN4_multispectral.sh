@@ -804,6 +804,12 @@ if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
+#Clip the classification outputs with the new mask
+for item in ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/SegmentationPosteriors1.mnc ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc; do
+  ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/classifymask.mnc
+  ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/hotmask.mnc
+done
+
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
@@ -844,11 +850,19 @@ while true; do
 
   #Combine GM and WM probably images into a N4 mask,
   ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
-  ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/weight.mnc 0 1
+  ImageMath 3 ${tmpdir}/${n}/weight.mnc RescaleImage ${tmpdir}/${n}/weight.mnc 0 1
+
+  ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
   if [[ -n ${excludemask} ]]; then
-    ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/primary_weight.mnc ${excludemask}
+    ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
   fi
+
+  #Clip the classification weight and posteriors
+  for item in ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/SegmentationPosteriors1.mnc ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc; do
+    ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/classifymask.mnc
+    ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/hotmask.mnc
+  done
 
   #Always exclude 0 from correction
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
