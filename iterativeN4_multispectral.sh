@@ -562,9 +562,7 @@ do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
-mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Correct above the 0.5% mean threshold
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
@@ -613,9 +611,7 @@ fi
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
-mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Register to MNI space
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -701,9 +697,7 @@ fi
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
-mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Affine register to MNI space, tweak registration
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -813,9 +807,7 @@ while true; do
   ((++n))
   mkdir -p ${tmpdir}/${n}
 
-  cp -f ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
-  minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS}  ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/denoise.mnc
-  mv -f ${tmpdir}/${n}/denoise.mnc ${tmpdir}/${n}/t1.mnc
+  minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
   #Combine the masks because sometimes beast misses badly biased cerebellum
   ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc
