@@ -463,14 +463,14 @@ maxval=$(mincstats -pctT 99.99 -quiet ${originput})
 
 #Forceably convert to MINC2, and clamp range to avoid negative numbers
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
-mincmath -quiet -clamp -const2 0 ${maxval} ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 ${maxval} ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
 mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
 originput=${tmpdir}/originput.mnc
 
 #Isotropize, crop, clamp, and pad input volume
 isostep=1
 ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
-mincmath -quiet -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
 mv -f ${tmpdir}/input.clamp.mnc ${input}
 
 #If lesion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
@@ -551,7 +551,7 @@ fi
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 
 #Always exclude 0 from correction
-minccalc -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 8
@@ -600,7 +600,7 @@ fi
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
 #Calculate coeffcient of variation between this round bias field and prior round
-minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
@@ -648,7 +648,7 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [$
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 #BSpline[5] does weird things to intensity, clip back to positive range
-mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink the MNI mask for the first intensity matching
@@ -688,7 +688,7 @@ ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpd
 do_N4_correct ${input} ${tmpdir}/initmask.mnc  ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/primary_weight.mnc ${maxval} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 6
 
 
-minccalc -zero -quiet -clobber -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
@@ -718,8 +718,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
-
-mincmath -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose}  -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink last round's beastmask for normalization
@@ -740,8 +739,9 @@ ImageMath 3 ${tmpdir}/${n}/extractmask.mnc addtozero ${tmpdir}/${n}/bmask.mnc ${
 iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/extractmask.mnc 2 1 ball 1
 iMath 3 ${tmpdir}/${n}/modelextractmask.mnc MD ${REGISTRATIONBRAINMASK} 2 1 ball 1
 
-minccalc -expression 'A[0]*A[1]' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/extractmask.mnc ${tmpdir}/${n}/t1.extracted.mnc
-minccalc -expression 'A[0]*A[1]' ${REGISTRATIONMODEL} ${tmpdir}/${n}/modelextractmask.mnc ${tmpdir}/${n}/modelextracted.mnc
+#Extract t1
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression 'A[0]*A[1]' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/extractmask.mnc ${tmpdir}/${n}/t1.extracted.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression 'A[0]*A[1]' ${REGISTRATIONMODEL} ${tmpdir}/${n}/modelextractmask.mnc ${tmpdir}/${n}/modelextracted.mnc
 
 #Non linearly register priors
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -891,7 +891,7 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/finalclassify.mnc -r ${originput} -n GenericLabel
 
 #Create a FOV mask for the original input
-minccalc -quiet -unsigned -byte -expression 'A[0]?1:1' ${originput} ${tmpdir}/originitmask.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${originput} ${tmpdir}/originitmask.mnc
 
 #Resample the average bias field into the original space
 mv -f ${tmpdir}/${n}/avg_bias.mnc ${tmpdir}/${n}/avg_bias_orig.mnc
@@ -915,7 +915,7 @@ if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   cp -f ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename ${output} .mnc).classifymask.mnc
   cp -f ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
   cp -f ${tmpdir}/finalmask.mnc $(dirname $output)/$(basename ${output} .mnc).mask.mnc
-  minccalc -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
   ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc ${tmpdir}/finalmask.mnc 1 10
 fi
 
