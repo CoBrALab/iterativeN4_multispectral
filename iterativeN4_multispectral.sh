@@ -6,7 +6,7 @@
 # ARG_OPTIONAL_SINGLE([config],[c],[Path to an alternative config file defining priors to use])
 # ARG_OPTIONAL_SINGLE([logfile],[l],[Path to file to log all output])
 # ARG_OPTIONAL_BOOLEAN([standalone],[s],[Script is run standalone so save all outputs])
-# ARG_OPTIONAL_BOOLEAN([autocrop],[a],[Crop the final output to 20 mm around the brain mask])
+# ARG_OPTIONAL_BOOLEAN([autocrop],[a],[Crop the final output to 10 mm around the skull])
 # ARG_OPTIONAL_BOOLEAN([denoise],[d],[Denoise the final output files])
 # ARG_OPTIONAL_SINGLE([max-iterations],[],[Maximum number of iterations to run],[10])
 # ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.005])
@@ -79,7 +79,7 @@ print_help()
   printf '\t%s\n' "-c, --config: Path to an alternative config file defining priors to use (no default)"
   printf '\t%s\n' "-l, --logfile: Path to file to log all output (no default)"
   printf '\t%s\n' "-s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)"
-  printf '\t%s\n' "-a, --autocrop, --no-autocrop: Crop the final output to 20 mm around the brain mask (off by default)"
+  printf '\t%s\n' "-a, --autocrop, --no-autocrop: Crop the final output to 10 mm around the skull (off by default)"
   printf '\t%s\n' "-d, --denoise, --no-denoise: Denoise the final output files (off by default)"
   printf '\t%s\n' "--max-iterations: Maximum number of iterations to run (default: '10')"
   printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.005')"
@@ -472,9 +472,6 @@ isostep=1
 ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
 mv -f ${tmpdir}/input.clamp.mnc ${input}
-ImageMath 3 ${tmpdir}/cropmask.mnc ThresholdAtMean ${input} 1
-ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/cropmask.mnc 1 10
-mv -f ${tmpdir}/input.crop.mnc ${input}
 
 #If lesion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
 if [[ -n ${_arg_exclude} ]]; then
@@ -489,10 +486,7 @@ fi
 dx=$(mincinfo -attvalue xspace:step ${originput})
 dy=$(mincinfo -attvalue yspace:step ${originput})
 dz=$(mincinfo -attvalue zspace:step ${originput})
-shrink_final_round=$(python -c "import math; print(max(2,int(math.ceil(2.0 / ( ( abs($dx) + abs($dy) + abs($dz) ) / 3.0)))))")
-
-#Generate a whole-image mask to force N4 to always do correction over whole image
-minccalc -quiet -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
+shrink_final_round=$(python -c "import math; print(max(2,int(math.floor(2.0 / ( ( abs($dx) + abs($dy) + abs($dz) ) / 3.0)))))")
 
 ################################################################################
 #Round 0, N4 across areas greater than 0.5% of mean
@@ -501,7 +495,50 @@ n=0
 
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
+
+#First try registration to MNI space to get headmask
+antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
+  --output [${tmpdir}/${n}/mni] \
+  --use-histogram-matching 0 \
+  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
+  --transform Translation[0.5] \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25] \
+    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+    --shrink-factors 16x15x14x13x12x11 \
+    --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317mm \
+  --transform Rigid[0.25] \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,37,Regular,0.25] \
+    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+    --shrink-factors 13x12x11x10x9x8 \
+    --smoothing-sigmas 11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023mm \
+  --transform Similarity[0.125] \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.25] \
+    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+    --shrink-factors 10x9x8x7x6x5 \
+    --smoothing-sigmas 8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144mm \
+  --transform Affine[0.1] \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.25] \
+    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+    --shrink-factors 7x6x5x4x3x2 \
+    --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
+
+#Generate model headmask
+ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
+ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
+
+#Resample into subject space, zero background and recrop
+ImageMath 3 ${input} PadImage ${input} 50
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
+ImageMath 3 ${input} m ${input} ${tmpdir}/headmask.mnc
+ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/headmask.mnc 1 10
+mv -f ${tmpdir}/input.crop.mnc ${input}
+
+#Zero and recrop the input file as well for stages going forward
+ImageMath 3 ${tmpdir}/${n}/t1.mnc PadImage ${tmpdir}/${n}/t1.mnc 50
+ImageMath 3 ${tmpdir}/${n}/t1.mnc m ${tmpdir}/${n}/t1.mnc ${tmpdir}/headmask.mnc
+ExtractRegionFromImageByMask 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/headmask.mnc 1 10
+mv -f ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/${n}/t1.mnc
 
 #Initial threshold of greater than 0.5 of mean intensity
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
@@ -509,6 +546,9 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
+
+#Generate a whole-image mask to force N4 to always do correction over whole image
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 
 #Always exclude 0 from correction
 minccalc -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
@@ -533,27 +573,19 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
-  --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
-  --transform Translation[0.5] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,128,Regular,0.5] \
-  	--convergence [2025x2025x2025,1e-6,10] \
-  	--shrink-factors 16x8x4 \
-  	--smoothing-sigmas 13.5891488046x6.7945744023x3.39728720115mm \
-  --transform Rigid[0.25] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
-  	--convergence [2025x2025x2025,1e-6,10] \
-  	--shrink-factors 8x4x2 \
-  	--smoothing-sigmas 6.7945744023x3.39728720115x1.69864360058mm \
-  --transform Similarity[0.125] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
-  	--convergence [2025x2025x750,1e-6,10] \
-  	--shrink-factors 4x2x1 \
-  	--smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288mm \
+  --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
   --transform Affine[0.1] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
-  	--convergence [2025x750x433,1e-6,10] \
-  	--shrink-factors 2x1x1 \
-  	--smoothing-sigmas 1.69864360058x0.849321800288x0.424660900144mm
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
+    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+    --shrink-factors 7x6x5x4x3x2 \
+    --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
+    --masks [NULL,NULL] \
+  --transform Affine[0.1] \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
+    --convergence [2025x2025x2025x750x250,1e-6,20] \
+    --shrink-factors 4x3x2x1x1 \
+    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+    --masks [${REGISTRATIONBRAINMASK},NULL]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
@@ -843,12 +875,16 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o 
 
 #If cropping is enabled, recrop the originput file and resample the mask again
 if [[ ${_arg_autocrop} == "on" ]]; then
-  ExtractRegionFromImageByMask 3 ${originput} ${tmpdir}/originput.crop.mnc ${tmpdir}/finalmask.mnc 1 25
+  ImageMath 3 ${originput} PadImage ${originput} 50
+  antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/headmask.mnc -o ${tmpdir}/finalheadmask.mnc -r ${originput} -n GenericLabel
+  ImageMath 3 ${originput} m ${originput} ${tmpdir}/finalheadmask.mnc
+  ExtractRegionFromImageByMask 3 ${originput} ${tmpdir}/originput.crop.mnc ${tmpdir}/finalheadmask.mnc 1 10
   mv -f ${tmpdir}/originput.crop.mnc ${originput}
-  mincresample -clobber -like ${originput} ${tmpdir}/${n}/primary_weight.mnc ${tmpdir}/finalweight.mnc
-  antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
 fi
 
+#Transform all the working files into the original input space
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -like ${originput} ${tmpdir}/${n}/weight.mnc ${tmpdir}/finalweight.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalclassifymask.mnc -r ${originput} -n GenericLabel
