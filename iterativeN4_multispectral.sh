@@ -624,23 +624,11 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Similarity[0.125] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
-  	--convergence [2025x2025x750,1e-6,10] \
-  	--shrink-factors 4x2x1 \
-  	--smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288mm \
-  	--masks [NULL,NULL] \
   --transform Affine[0.1] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
-  	--convergence [2025x750x433,1e-6,10] \
-  	--shrink-factors 2x1x1 \
-  	--smoothing-sigmas 1.69864360058x0.849321800288x0.424660900144mm \
-  	--masks [NULL,NULL] \
-  --transform Affine[0.1] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
-  	--convergence [2025x2025x750x433x250,1e-6,10] \
-  	--shrink-factors 4x2x1x1x1 \
-  	--smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288x0.424660900144x0mm \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
+    --convergence [2025x2025x2025x750x250,1e-6,20] \
+    --shrink-factors 4x3x2x1x1 \
+    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
     --masks [${REGISTRATIONBRAINMASK},NULL]
 
 #Bring MNI mask to native space affinely
@@ -710,12 +698,12 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [${tmpdir}/${n}/mni] \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[0.1] \
-  	--metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
-  	--convergence [2025x2025x750x433x250,1e-6,10] \
-  	--shrink-factors 4x2x1x1x1 \
-  	--smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288x0.424660900144x0mm \
-    --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
+  --transform Affine[0.05] \
+    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
+    --convergence [2025x2025x2025x750x250,1e-6,20] \
+    --shrink-factors 4x3x2x1x1 \
+    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+    --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask.mnc]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 mincmath -quiet ${N4_VERBOSE:+-verbose}  -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
