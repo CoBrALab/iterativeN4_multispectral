@@ -649,19 +649,18 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [$
 
 #Make MNI-space copy of brain for BeAST
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
-
 #BSpline[5] does weird things to intensity, clip back to positive range
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink the MNI mask for the first intensity matching
-iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 4 1 ball 1
+iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 3 1 ball 1
 
 #Intensity normalize
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
-mincbeast ${N4_VERBOSE:+-verbose} -clobber -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
+mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 #Resample beast mask and MNI mask to native space
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
@@ -723,22 +722,23 @@ mincmath -quiet ${N4_VERBOSE:+-verbose}  -clamp -const2 0 $(mincstats -quiet -ma
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink last round's beastmask for normalization
-iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/$((n - 1))/beastmask.mnc 5 1 ball 1
+iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/$((n - 1))/beastmask.mnc 3 1 ball 1
 
 #Intensity normalize
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
-mincbeast ${N4_VERBOSE:+-verbose} -clobber -fill -median -same_res -flip -conf ${BEAST_CONFIG2} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
+mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG2} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 antsApplyTransforms -i ${tmpdir}/${n}/beastmask.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/bmask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mniaffinemask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+
+#Last time beast is run, copy outside loops
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/extractmask.mnc addtozero ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mniaffinemask.mnc
-
-iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/extractmask.mnc 2 1 ball 1
-iMath 3 ${tmpdir}/${n}/modelextractmask.mnc MD ${REGISTRATIONBRAINMASK} 2 1 ball 1
+#Create extracted model for nonlinear registration
+iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/bmask.mnc 3 1 ball 1
+iMath 3 ${tmpdir}/${n}/modelextractmask.mnc MD ${REGISTRATIONBRAINMASK} 3 1 ball 1
 
 #Extract t1
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression 'A[0]*A[1]' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/extractmask.mnc ${tmpdir}/${n}/t1.extracted.mnc
@@ -762,7 +762,9 @@ antsApplyTransforms -i ${CSFPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] 
 #Masks
 antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 
+#Last time we generate MNI mask, save it outside iterations
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
+cp -f ${tmpdir}/${n}/mniaffinemask.mnc ${tmpdir}/mniaffinemask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
 mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
