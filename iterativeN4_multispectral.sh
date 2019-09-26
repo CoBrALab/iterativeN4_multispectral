@@ -367,16 +367,16 @@ function do_N4_correct {
   local max
   local pct25
   local pct75
-  local n
+  local npoints
   local histbins
 
   #Calculate bins for N4 with Freedman-Diaconis’s Rule
   min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  n=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${n})**(-1.0/3.0)) ))" )
+  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))" )
 
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
     -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,${histbins}] \
