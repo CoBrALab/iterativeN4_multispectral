@@ -7,10 +7,11 @@
 # ARG_OPTIONAL_SINGLE([logfile],[l],[Path to file to log all output])
 # ARG_OPTIONAL_BOOLEAN([standalone],[s],[Script is run standalone so save all outputs])
 # ARG_OPTIONAL_BOOLEAN([autocrop],[a],[Crop the final output to 20 mm around the brain mask])
+# ARG_OPTIONAL_BOOLEAN([denoise],[d],[Denoise the final output files])
 # ARG_OPTIONAL_SINGLE([max-iterations],[],[Maximum number of iterations to run],[10])
 # ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.005])
 # ARG_OPTIONAL_SINGLE([classification-prior-weight],[],[How much weight is given to prior classification proabilities during iteration],[0.25])
-# ARG_OPTIONAL_BOOLEAN([debug],[d],[Debug mode, increase verbosity further, don't cleanup])
+# ARG_OPTIONAL_BOOLEAN([debug],[],[Debug mode, increase verbosity further, don't cleanup])
 # ARG_VERBOSE([v])
 # ARG_POSITIONAL_SINGLE([input],[T1w scan to be corrected])
 # ARG_POSITIONAL_SINGLE([output],[Output filename for corrected T1w (also used as basename for other outputs)])
@@ -39,7 +40,7 @@ die()
 
 evaluate_strictness()
 {
-  [[ "$2" =~ ^-(-(exclude|config|logfile|standalone|autocrop|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsadvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
+  [[ "$2" =~ ^-(-(exclude|config|logfile|standalone|autocrop|denoise|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsadvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
 }
 
 
@@ -60,6 +61,7 @@ _arg_config=
 _arg_logfile=
 _arg_standalone="off"
 _arg_autocrop="off"
+_arg_denoise="off"
 _arg_max_iterations="10"
 _arg_convergence_threshold="0.005"
 _arg_classification_prior_weight="0.25"
@@ -70,7 +72,7 @@ _arg_verbose=0
 print_help()
 {
   printf '%s\n' "iterativeN4_multispectral.sh is script which performs iterative inhomogeneity (bias field) correction and classification on T1w (and optionally T2w/PDw) MRI scans"
-  printf 'Usage: %s [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [-d|--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
+  printf 'Usage: %s [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [-d|--(no-)denoise] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
   printf '\t%s\n' "<input>: T1w scan to be corrected"
   printf '\t%s\n' "<output>: Output filename for corrected T1w (also used as basename for other outputs)"
   printf '\t%s\n' "-e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)"
@@ -78,10 +80,11 @@ print_help()
   printf '\t%s\n' "-l, --logfile: Path to file to log all output (no default)"
   printf '\t%s\n' "-s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)"
   printf '\t%s\n' "-a, --autocrop, --no-autocrop: Crop the final output to 20 mm around the brain mask (off by default)"
+  printf '\t%s\n' "-d, --denoise, --no-denoise: Denoise the final output files (off by default)"
   printf '\t%s\n' "--max-iterations: Maximum number of iterations to run (default: '10')"
   printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.005')"
   printf '\t%s\n' "--classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')"
-  printf '\t%s\n' "-d, --debug, --no-debug: Debug mode, increase verbosity further, don't cleanup (off by default)"
+  printf '\t%s\n' "--debug, --no-debug: Debug mode, increase verbosity further, don't cleanup (off by default)"
   printf '\t%s\n' "-v, --verbose: Set verbose output (can be specified multiple times to increase the effect)"
   printf '\t%s\n' "-h, --help: Prints help"
 }
@@ -160,6 +163,18 @@ parse_commandline()
           { begins_with_short_option "$_next" && shift && set -- "-a" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
         fi
         ;;
+      -d|--no-denoise|--denoise)
+        _arg_denoise="on"
+        test "${1:0:5}" = "--no-" && _arg_denoise="off"
+        ;;
+      -d*)
+        _arg_denoise="on"
+        _next="${_key##-d}"
+        if test -n "$_next" -a "$_next" != "$_key"
+        then
+          { begins_with_short_option "$_next" && shift && set -- "-d" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
+        fi
+        ;;
       --max-iterations)
         test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
         _arg_max_iterations="$2"
@@ -190,17 +205,9 @@ parse_commandline()
         _arg_classification_prior_weight="${_key##--classification-prior-weight=}"
         evaluate_strictness "$_key" "$_arg_classification_prior_weight"
         ;;
-      -d|--no-debug|--debug)
+      --no-debug|--debug)
         _arg_debug="on"
         test "${1:0:5}" = "--no-" && _arg_debug="off"
-        ;;
-      -d*)
-        _arg_debug="on"
-        _next="${_key##-d}"
-        if test -n "$_next" -a "$_next" != "$_key"
-        then
-          { begins_with_short_option "$_next" && shift && set -- "-d" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
-        fi
         ;;
       -v|--verbose)
         _arg_verbose=$((_arg_verbose + 1))
@@ -859,7 +866,12 @@ mkdir -p ${tmpdir}/${n}
 #Do the final correction
 do_N4_correct ${originput} ${tmpdir}/originitmask.mnc ${tmpdir}/finalmask.mnc ${tmpdir}/finalweight.mnc ${tmpdir}/corrected.mnc ${tmpdir}/bias.mnc ${shrink_final_round}
 
-cp -f ${tmpdir}/corrected.mnc ${output}
+#Denoise output if requested
+if [[ ${_arg_denoise} == "on" ]]; then
+  minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/corrected.mnc ${output}
+else
+  cp -f ${tmpdir}/corrected.mnc ${output}
+fi
 
 if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   cp -f ${tmpdir}/finalbmask.mnc $(dirname ${output})/$(basename ${output} .mnc).beastmask.mnc
