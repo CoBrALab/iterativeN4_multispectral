@@ -385,7 +385,15 @@ function do_N4_correct {
 
   #Demean bias field estimate and recorrect file
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean ${n4bias})
-  ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
+  if (( n == 0 )); then
+    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
+  elif (( n == 1 )); then
+    AverageImages 3 ${tmpdir}/${n}/avg_bias.mnc 0 ${n4bias} ${tmpdir}/$((n - 1))/bias.mnc
+    ImageMath 3 ${n4corrected} / ${n4input} ${tmpdir}/${n}/avg_bias.mnc
+  else
+    AverageImages 3 ${tmpdir}/${n}/avg_bias.mnc 0 ${n4bias} ${tmpdir}/$((n - 1))/avg_bias.mnc
+    ImageMath 3 ${n4corrected} / ${n4input} ${tmpdir}/${n}/avg_bias.mnc
+  fi
 
   #Normalize and rescale intensity
   ImageMath 3 ${n4corrected} TruncateImageIntensity ${n4corrected} 0.0005 0.9995 1024 ${n4brainmask}
@@ -815,8 +823,14 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc
 #Create a FOV mask for the original input
 minccalc -quiet -unsigned -byte -expression 'A[0]?1:1' ${originput} ${tmpdir}/originitmask.mnc
 
-do_N4_correct ${originput} ${tmpdir}/originitmask.mnc ${tmpdir}/finalmask.mnc ${tmpdir}/finalweight.mnc ${maxval} ${tmpdir}/corrected.mnc ${tmpdir}/bias.mnc ${shrink_final_round}
+#Resample the average bias field into the original space
+mv -f ${tmpdir}/${n}/avg_bias.mnc ${tmpdir}/${n}/avg_bias_orig.mnc
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} -keep ${tmpdir}/${n}/avg_bias_orig.mnc ${tmpdir}/${n}/avg_bias.mnc
+((++n))
+mkdir -p ${tmpdir}/${n}
 
+#Do the final correction
+do_N4_correct ${originput} ${tmpdir}/originitmask.mnc ${tmpdir}/finalmask.mnc ${tmpdir}/finalweight.mnc ${tmpdir}/corrected.mnc ${tmpdir}/bias.mnc ${shrink_final_round}
 
 cp -f ${tmpdir}/corrected.mnc ${output}
 
