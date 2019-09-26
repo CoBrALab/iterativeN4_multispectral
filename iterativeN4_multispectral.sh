@@ -669,23 +669,26 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [$
 #Combine the masks because sometimes beast misses badly biased cerebellum
 ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
 
-#Expand the mask a bit
-iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
+#Generate a hotmask using the existing weight mask
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmask.mnc
 
-#Create hotmask and exlcude hot voxels from weight
-ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/hotmask.mnc \
-  0 $(mincstats -quiet -pctT 99.95 -mask ${tmpdir}/${n}/mask_D.mnc -mask_binvalue 1 ${tmpdir}/${n}/t1.mnc) 1 0
-
-#Exclude hotspots to avoid kmeans classifying skull as brain
-ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
-
-ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Otsu 1
+#Do a quick kmeans to get gm/wm and make a hard mask for weight
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/mask.mnc
+ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 2 3 1 0
+iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
-ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/mask_D.mnc
+#Generate a hotmask using the kmeans brainmask
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
+#Remove really hot voxels from weight for N4
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
@@ -784,12 +787,17 @@ Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [25,0.001]
 #Convert classification to the mask
 classify_to_mask
 
+#Generate outlier mask from white matter mask intensity
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/hotmask.mnc
+
 #Combine GM and WM proabability images into a N4 mask,
 ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
-ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc RescaleImage ${tmpdir}/${n}/weight.mnc 0 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc RescaleImage ${tmpdir}/${n}/weight.mnc 0 1
+
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
 if [[ -n ${excludemask} ]]; then
-  ImageMath 3 ${tmpdir}/${n}/primary_weight.mnc m ${tmpdir}/${n}/primary_weight.mnc ${excludemask}
+  ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
 
