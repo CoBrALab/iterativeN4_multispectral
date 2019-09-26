@@ -885,12 +885,10 @@ while true; do
 
 done
 
+echo "--------------------"
 echo "Convergence results:"
 cat ${tmpdir}/convergence.txt
-
-#Transform all the working files into the original input space
-mincresample -like ${originput} ${tmpdir}/${n}/primary_weight.mnc ${tmpdir}/finalweight.mnc
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
+echo "--------------------"
 
 #If cropping is enabled, recrop the originput file and resample the mask again
 if [[ ${_arg_autocrop} == "on" ]]; then
@@ -906,7 +904,6 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -like ${originput} ${tmpdir}/${n}/weight.mnc ${tmpdir}/finalweight.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${originput} -n GenericLabel
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalclassifymask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/finalclassify.mnc -r ${originput} -n GenericLabel
 
 #Create a FOV mask for the original input
@@ -928,10 +925,10 @@ else
   cp -f ${tmpdir}/corrected.mnc ${output}
 fi
 
+#Output final classification files if standalone
 if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   cp -f ${tmpdir}/finalbmask.mnc $(dirname ${output})/$(basename ${output} .mnc).beastmask.mnc
   cp -f ${tmpdir}/finalmnimask.mnc $(dirname ${output})/$(basename ${output} .mnc).mnimask.mnc
-  cp -f ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename ${output} .mnc).classifymask.mnc
   cp -f ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
   cp -f ${tmpdir}/finalmask.mnc $(dirname $output)/$(basename ${output} .mnc).mask.mnc
   minccalc -quiet ${N4_VERBOSE:+-verbose} -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
