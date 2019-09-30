@@ -557,6 +557,8 @@ mv -f ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/${n}/t1.mnc
 
 #Initial threshold of greater than 0.5 of mean intensity
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+
 
 #Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
