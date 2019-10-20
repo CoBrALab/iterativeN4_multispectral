@@ -274,7 +274,7 @@ set -euoE pipefail
 
 #Special trick to redirect all output within script into logfile
 if [[ -n ${_arg_logfile} ]]; then
-  exec >  >(tee -ia ${_arg_logfile})
+  exec > >(tee -ia ${_arg_logfile})
   exec 2> >(tee -ia ${_arg_logfile} >&2)
 fi
 
@@ -294,7 +294,7 @@ fi
 tmpdir=$(mktemp -d)
 
 #Setup exit trap for cleanup, don't do if debug
-function finish {
+function finish() {
   if [[ ${_arg_debug} == "off" ]]; then
     rm -rf "${tmpdir}"
   fi
@@ -359,11 +359,11 @@ originput=${_arg_input}
 input=${tmpdir}/t1.mnc
 
 #Quick awk math function
-calc(){ awk "BEGIN { print "$*" }"; }
+calc() { awk "BEGIN { print "$*" }"; }
 
 #Function for generating an outlier mask based on >3xIQR
 #Mostly for excluding blood vessels when T1 was tuned improperly
-function outlier_mask {
+function outlier_mask() {
   #Generate an outlier mask as median+3*IQR
   local outlier_input=$1
   local outlier_mask=$2
@@ -386,7 +386,7 @@ function outlier_mask {
 }
 
 #Function used to do bias field correction
-function do_N4_correct {
+function do_N4_correct() {
   #input fov mask weight output bias shrink
   local n4input=$1
   local n4initmask=$2
@@ -412,7 +412,7 @@ function do_N4_correct {
   npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))" )
+  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
     -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [${n4fwhm},0.01,${histbins}] \
@@ -422,7 +422,7 @@ function do_N4_correct {
   iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
 
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${n4bias})
-  if (( n == 0 )); then
+  if ((n == 0)); then
     cp -f ${n4bias} ${tmpdir}/${n}/iterative_bias.mnc
     cp -f ${n4bias} ${tmpdir}/wholebrain_bias.mnc
     ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias.mnc
@@ -448,7 +448,7 @@ function do_N4_correct {
 
 #Convert classify image into a mask
 #Mostly a clone of the supersteps of the antsBrainExtraction supersteps
-function classify_to_mask {
+function classify_to_mask() {
   #Breakup classification and drop try to exclude small misclassified chunks
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class2.mnc 2 2 1 0
@@ -528,25 +528,25 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --use-histogram-matching 0 \
   --initial-moving-transform [${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1] \
   --transform Translation[0.5] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25] \
-    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
-    --shrink-factors 16x15x14x13x12x11 \
-    --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317mm \
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25] \
+  --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+  --shrink-factors 16x15x14x13x12x11 \
+  --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317mm \
   --transform Rigid[0.25] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,37,Regular,0.25] \
-    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
-    --shrink-factors 13x12x11x10x9x8 \
-    --smoothing-sigmas 11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023mm \
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,37,Regular,0.25] \
+  --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+  --shrink-factors 13x12x11x10x9x8 \
+  --smoothing-sigmas 11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023mm \
   --transform Similarity[0.125] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.25] \
-    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
-    --shrink-factors 10x9x8x7x6x5 \
-    --smoothing-sigmas 8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144mm \
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.25] \
+  --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+  --shrink-factors 10x9x8x7x6x5 \
+  --smoothing-sigmas 8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144mm \
   --transform Affine[0.1] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.25] \
-    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
-    --shrink-factors 7x6x5x4x3x2 \
-    --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.25] \
+  --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+  --shrink-factors 7x6x5x4x3x2 \
+  --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm
 
 #Generate model headmask
 ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
@@ -569,7 +569,6 @@ mv -f ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/${n}/t1.mnc
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.75*$(mincstats -quiet -floor 1e-6 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
-
 #Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
@@ -585,7 +584,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/weight.mnc 0.1
 
 ################################################################################
-#Round 1, N4 across areas greater than 0.5% of mean, intersected with affine brainmask
+#Round 1, N4 over kmeans estimates WM/GM mask using model affine brainmask
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -598,17 +597,17 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
   --transform Affine[0.1] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
-    --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
-    --shrink-factors 7x6x5x4x3x2 \
-    --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
-    --masks [NULL,NULL] \
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5] \
+  --convergence [2025x2025x2025x2025x2025x2025,1e-6,10] \
+  --shrink-factors 7x6x5x4x3x2 \
+  --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
+  --masks [NULL,NULL] \
   --transform Affine[0.1] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
-    --convergence [2025x2025x2025x750x250,1e-6,20] \
-    --shrink-factors 4x3x2x1x1 \
-    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
-    --masks [${REGISTRATIONBRAINMASK},NULL]
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
+  --convergence [2025x2025x2025x750x250,1e-6,20] \
+  --shrink-factors 4x3x2x1x1 \
+  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+  --masks [${REGISTRATIONBRAINMASK},NULL]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
@@ -649,7 +648,7 @@ if [[ ${_arg_debug} == "off" ]]; then
 fi
 
 ################################################################################
-#Round 2, N4 with brain mask intersected with Otsu mask
+#Round 2, N4 with kmeans GM/WM mask within combination of model affine and beastmask
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -662,11 +661,11 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
   --transform Affine[0.1] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
-    --convergence [2025x2025x2025x750x250,1e-6,20] \
-    --shrink-factors 4x3x2x1x1 \
-    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
-    --masks [${REGISTRATIONBRAINMASK},NULL]
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
+  --convergence [2025x2025x2025x750x250,1e-6,20] \
+  --shrink-factors 4x3x2x1x1 \
+  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+  --masks [${REGISTRATIONBRAINMASK},NULL]
 
 #Bring MNI mask to native space affinely
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
@@ -734,7 +733,7 @@ if [[ ${_arg_debug} == "off" ]]; then
 fi
 
 ################################################################################
-#Round 3, N4 with nonlinearly MNI-bootstrapped WM/GM segmentation proabilities
+#Round 3, N4 with classification poserior probabilties, boostrapped from model priors
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -747,14 +746,14 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --use-histogram-matching 0 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
   --transform Affine[0.05] \
-    --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
-    --convergence [2025x2025x2025x750x250,1e-6,20] \
-    --shrink-factors 4x3x2x1x1 \
-    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
-    --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
+  --metric Mattes[${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None] \
+  --convergence [2025x2025x2025x750x250,1e-6,20] \
+  --shrink-factors 4x3x2x1x1 \
+  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+  --masks [${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[5] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
-mincmath -quiet ${N4_VERBOSE:+-verbose}  -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink last round's beastmask for normalization
@@ -792,15 +791,16 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
   --use-histogram-matching 0 \
   --transform SyN[ 0.1,3,0 ] \
-    --metric Mattes[ ${tmpdir}/${n}/modelextracted.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,256,None ] \
-    --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x675x225x75x25,1e-6,10 ] \
-    --shrink-factors 8x8x8x8x8x8x8x8x8x7x6x5x4x3x2x1x1 \
-    --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm
+  --metric Mattes[ ${tmpdir}/${n}/modelextracted.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,256,None ] \
+  --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x675x225x75x25,1e-6,10 ] \
+  --shrink-factors 8x8x8x8x8x8x8x8x8x7x6x5x4x3x2x1x1 \
+  --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm
 
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms -i ${WMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
 antsApplyTransforms -i ${GMPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
 antsApplyTransforms -i ${CSFPRIOR} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+
 #Masks
 antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 
@@ -867,7 +867,7 @@ if [[ ${_arg_debug} == "off" ]]; then
 fi
 
 ################################################################################
-#Remaining rounds, N4 with segmentations bootstrapped from prior run
+#Remaining rounds, N4 with segmentation posteriors bootstrapped from prior run
 ################################################################################
 while true; do
   ((++n))
@@ -978,7 +978,7 @@ mv -f ${tmpdir}/finalclass3_resample.mnc ${tmpdir}/finalclass3.mnc
 #Normalize and rescale intensity
 n4brainmean=$(mincstats -quiet -mean -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${tmpdir}/corrected.mnc)
 minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(32767*A[0]/${n4brainmean},0,65535)" \
-    ${tmpdir}/corrected.mnc ${tmpdir}/corrected.norm.mnc
+  ${tmpdir}/corrected.mnc ${tmpdir}/corrected.norm.mnc
 
 #Denoise output if requested
 if [[ ${_arg_denoise} == "on" ]]; then
