@@ -9,7 +9,7 @@
 # ARG_OPTIONAL_BOOLEAN([autocrop],[a],[Crop the final output to 10 mm around the skull])
 # ARG_OPTIONAL_BOOLEAN([denoise],[d],[Denoise the final output files])
 # ARG_OPTIONAL_SINGLE([max-iterations],[],[Maximum number of iterations to run],[10])
-# ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.005])
+# ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.01])
 # ARG_OPTIONAL_SINGLE([classification-prior-weight],[],[How much weight is given to prior classification proabilities during iteration],[0.25])
 # ARG_OPTIONAL_BOOLEAN([debug],[],[Debug mode, increase verbosity further, don't cleanup])
 # ARG_VERBOSE([v])
@@ -63,7 +63,7 @@ _arg_standalone="off"
 _arg_autocrop="off"
 _arg_denoise="off"
 _arg_max_iterations="10"
-_arg_convergence_threshold="0.005"
+_arg_convergence_threshold="0.01"
 _arg_classification_prior_weight="0.25"
 _arg_debug="off"
 _arg_verbose=0
@@ -82,7 +82,7 @@ print_help()
   printf '\t%s\n' "-a, --autocrop, --no-autocrop: Crop the final output to 10 mm around the skull (off by default)"
   printf '\t%s\n' "-d, --denoise, --no-denoise: Denoise the final output files (off by default)"
   printf '\t%s\n' "--max-iterations: Maximum number of iterations to run (default: '10')"
-  printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.005')"
+  printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.01')"
   printf '\t%s\n' "--classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')"
   printf '\t%s\n' "--debug, --no-debug: Debug mode, increase verbosity further, don't cleanup (off by default)"
   printf '\t%s\n' "-v, --verbose: Set verbose output (can be specified multiple times to increase the effect)"
@@ -395,6 +395,8 @@ function do_N4_correct {
   local n4corrected=$5
   local n4bias=$6
   local n4shrink=$7
+  local n4meanmask=$8
+  local n4fwhm="${9:-0.05}"
 
   local min
   local max
@@ -402,6 +404,7 @@ function do_N4_correct {
   local pct75
   local npoints
   local histbins
+  local n4brainmean
 
   #Calculate bins for N4 with Freedman-Diaconis’s Rule
   min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
@@ -412,25 +415,35 @@ function do_N4_correct {
   histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))" )
 
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-    -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [0.05,0.01,${histbins}] \
+    -b [200] -c [300x300x300x300,1e-5] --histogram-sharpening [${n4fwhm},0.01,${histbins}] \
     -i ${n4input} \
     -o [${n4corrected},${n4bias}] -r 0
 
-  #Demean bias field estimate and recorrect file
-  ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean ${n4bias})
-  if (( n == 0 )); then
-    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
-  elif (( n == 1 )); then
-    AverageImages 3 ${tmpdir}/${n}/avg_bias.mnc 0 ${n4bias} ${tmpdir}/$((n - 1))/bias.mnc
-    ImageMath 3 ${n4corrected} / ${n4input} ${tmpdir}/${n}/avg_bias.mnc
-  else
-    AverageImages 3 ${tmpdir}/${n}/avg_bias.mnc 0 ${n4bias} ${tmpdir}/$((n - 1))/avg_bias.mnc
-    ImageMath 3 ${n4corrected} / ${n4input} ${tmpdir}/${n}/avg_bias.mnc
-  fi
+  iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
 
-  #Normalize and rescale intensity
-  ImageMath 3 ${n4corrected} TruncateImageIntensity ${n4corrected} 0.0005 0.9995 1024 ${n4brainmask}
-  ImageMath 3 ${n4corrected} RescaleImage ${n4corrected} 0 65535
+  ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${n4bias})
+  if (( n == 0 )); then
+    cp -f ${n4bias} ${tmpdir}/${n}/iterative_bias.mnc
+    cp -f ${n4bias} ${tmpdir}/wholebrain_bias.mnc
+    ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias.mnc
+    ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
+  else
+    #Update ongoing bias field estimate
+    ImageMath 3 ${tmpdir}/${n}/iterative_bias.mnc m ${tmpdir}/$((n - 1))/iterative_bias.mnc ${n4bias}
+    #Rescale estimate to be mean 1 inside brain
+    ImageMath 3 ${tmpdir}/${n}/iterative_bias.mnc / ${tmpdir}/${n}/iterative_bias.mnc $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${tmpdir}/${n}/iterative_bias.mnc)
+    #Combine wholebrain estiamtes from first round with within-brain estimate
+    ImageMath 3 ${tmpdir}/${n}/iterative_bias_apply.mnc m ${tmpdir}/${n}/iterative_bias.mnc $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc
+    ImageMath 3 ${tmpdir}/${n}/wholebrain_bias_apply.mnc / ${tmpdir}/wholebrain_bias.mnc $(mincstats -quiet -mean -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias.mnc)
+    ImageMath 3 ${tmpdir}/${n}/iterative_bias_apply.mnc addtozero ${tmpdir}/${n}/iterative_bias_apply.mnc ${tmpdir}/${n}/wholebrain_bias_apply.mnc
+    #Correct original input brain
+    ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias.mnc
+    #Normalize and rescale intensity
+    n4brainmean=$(mincstats -quiet -mean -mask ${n4meanmask} -mask_binvalue 1 ${n4corrected})
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(32767*A[0]/${n4brainmean},0,65535)" \
+      ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+  fi
+  mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 }
 
 #Convert classify image into a mask
@@ -488,29 +501,26 @@ else
   excludemask=""
 fi
 
-#Compute final round shink factor for N4 to always be the same resolution
-dx=$(mincinfo -attvalue xspace:step ${originput})
-dy=$(mincinfo -attvalue yspace:step ${originput})
-dz=$(mincinfo -attvalue zspace:step ${originput})
-shrink_final_round=$(python -c "import math; print(max(2,int(math.floor(2.0 / ( ( abs($dx) + abs($dy) + abs($dz) ) / 3.0)))))")
-
 ################################################################################
-#Round 0, N4 across areas greater than 0.5% of mean
+#Round 0, do a precorrection, then form mask from 75% of Otsu threshold
+#Also estimate headmask and crop the internal files
 ################################################################################
 n=0
 
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
 
 #Initial threshold of greater than 0.5 of mean intensity
 ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 6
-minc_anlm --clobber ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.15
+minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #First try registration to MNI space to get headmask
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -572,7 +582,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/weight.mnc 0.1
 
 ################################################################################
 #Round 1, N4 across areas greater than 0.5% of mean, intersected with affine brainmask
@@ -580,7 +590,7 @@ do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #First try registration to MNI space, multistep
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -628,11 +638,11 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/kmeansmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
+do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/kmeansmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc
 
 #Calculate coeffcient of variation between this round bias field and prior round
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
-python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
+python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
   rm -rf ${tmpdir}/$((n - 1))
@@ -644,7 +654,7 @@ fi
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Register to MNI space
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -714,10 +724,10 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/kmeansmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
+do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/kmeansmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
-python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
+python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
   rm -rf ${tmpdir}/$((n - 1))
@@ -729,7 +739,7 @@ fi
 ((++n))
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #Affine register to MNI space, tweak registration
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -847,10 +857,10 @@ ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpd
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask_nooutlier.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
+do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2_nooutlier.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/class3.mnc
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
-python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
+python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
   rm -rf ${tmpdir}/$((n - 1))
@@ -863,7 +873,7 @@ while true; do
   ((++n))
   mkdir -p ${tmpdir}/${n}
 
-  minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+  minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
   #Combine the masks because sometimes beast misses badly biased cerebellum
   cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
@@ -907,11 +917,11 @@ while true; do
 
   ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/hotmask.mnc
 
-  do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask_nooutlier.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
+  do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2_nooutlier.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/class3.mnc
 
   #Compute coeffcient of variation
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
-  python -c "print(float(\"$(mincstats -quiet -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
+  python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
   if [[ ${_arg_debug} == "off" ]]; then
     rm -rf ${tmpdir}/$((n - 1))
@@ -937,23 +947,38 @@ if [[ ${_arg_autocrop} == "on" ]]; then
 fi
 
 #Transform all the working files into the original input space
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
-mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -like ${originput} ${tmpdir}/${n}/weight.mnc ${tmpdir}/finalweight.mnc
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o ${tmpdir}/finalmask.mnc -r ${originput} -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalclassifymask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${originput} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/finalclassify.mnc -r ${originput} -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/class3.mnc -o ${tmpdir}/finalclass3.mnc -r ${originput} -n GenericLabel
 
 #Create a FOV mask for the original input
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${originput} ${tmpdir}/originitmask.mnc
 
 #Resample the average bias field into the original space
-mv -f ${tmpdir}/${n}/avg_bias.mnc ${tmpdir}/${n}/avg_bias_orig.mnc
-mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} -keep ${tmpdir}/${n}/avg_bias_orig.mnc ${tmpdir}/${n}/avg_bias.mnc
-((++n))
-mkdir -p ${tmpdir}/${n}
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} -keep ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/iterative_bias_final.mnc
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} -keep ${tmpdir}/wholebrain_bias.mnc ${tmpdir}/wholebrain_bias_final.mnc
 
 #Do the final correction
-do_N4_correct ${originput} ${tmpdir}/originitmask.mnc ${tmpdir}/finalmask.mnc ${tmpdir}/finalweight.mnc ${tmpdir}/corrected.mnc ${tmpdir}/bias.mnc ${shrink_final_round}
+iMath 3 ${tmpdir}/finalmask_D.mnc MD ${tmpdir}/finalmask.mnc 2 1 ball 1
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -labels -near -like ${originput} ${tmpdir}/finalmask_D.mnc ${tmpdir}/finalmask_D_resample.mnc
+mv -f ${tmpdir}/finalmask_D_resample.mnc ${tmpdir}/finalmask_D.mnc
+ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc m ${tmpdir}/iterative_bias_final.mnc ${tmpdir}/finalmask_D.mnc
+ImageMath 3 ${tmpdir}/wholebrain_bias_final.mnc / ${tmpdir}/wholebrain_bias_final.mnc $(mincstats -quiet -mean -mask ${tmpdir}/finalmask_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias_final.mnc)
+ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc addtozero ${tmpdir}/iterative_bias_apply_final.mnc ${tmpdir}/wholebrain_bias_final.mnc
+ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc addtozero ${tmpdir}/iterative_bias_apply_final.mnc 1
+
+ImageMath 3 ${tmpdir}/corrected.mnc / ${originput} ${tmpdir}/iterative_bias_apply_final.mnc
+
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -labels -near -like ${tmpdir}/corrected.mnc ${tmpdir}/finalclass3.mnc ${tmpdir}/finalclass3_resample.mnc
+mv -f ${tmpdir}/finalclass3_resample.mnc ${tmpdir}/finalclass3.mnc
+
+#Normalize and rescale intensity
+n4brainmean=$(mincstats -quiet -mean -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${tmpdir}/corrected.mnc)
+minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(32767*A[0]/${n4brainmean},0,65535)" \
+    ${tmpdir}/corrected.mnc ${tmpdir}/corrected.norm.mnc
 
 #Denoise output if requested
 if [[ ${_arg_denoise} == "on" ]]; then
