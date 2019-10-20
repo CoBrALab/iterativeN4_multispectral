@@ -430,7 +430,7 @@ function do_N4_correct {
 
   #Normalize and rescale intensity
   ImageMath 3 ${n4corrected} TruncateImageIntensity ${n4corrected} 0.0005 0.9995 1024 ${n4brainmask}
-  ImageMath 3 ${n4corrected} RescaleImage ${n4corrected} 0 ${maxval}
+  ImageMath 3 ${n4corrected} RescaleImage ${n4corrected} 0 65535
 }
 
 #Convert classify image into a mask
@@ -465,20 +465,19 @@ function classify_to_mask {
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
 
-#Find maximum value of scan to rescale to for final output
-maxval=$(mincstats -pctT 99.99 -quiet ${originput})
-
+##########START OF SCRIPT#############
 #Forceably convert to MINC2, and clamp range to avoid negative numbers
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
-mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 ${maxval} ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/originput.mnc) ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
 mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
 originput=${tmpdir}/originput.mnc
 
-#Isotropize, crop, clamp, and pad input volume
+#Isotropize, and normalize intensity range
 isostep=1
 ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
-mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 ${maxval} ${input} ${tmpdir}/input.clamp.mnc
-mv -f ${tmpdir}/input.clamp.mnc ${input}
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -max -quiet ${input}) ${input} ${tmpdir}/input.clamp.mnc
+ImageMath 3 ${input} RescaleImage ${tmpdir}/input.clamp.mnc 0 65535
+rm -f ${tmpdir}/input.clamp.mnc
 
 #If lesion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
 if [[ -n ${_arg_exclude} ]]; then
@@ -570,7 +569,7 @@ fi
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 
 #Always exclude 0 from correction
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
@@ -626,7 +625,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 #Always exclude 0 from correction
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/kmeansmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
@@ -712,7 +711,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 #Always exclude 0 from correction
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/kmeansmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
@@ -845,7 +844,7 @@ done
 ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Always exclude 0 from correction
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask_nooutlier.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
@@ -903,7 +902,7 @@ while true; do
   done
 
   #Always exclude 0 from correction
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
   ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/hotmask.mnc
