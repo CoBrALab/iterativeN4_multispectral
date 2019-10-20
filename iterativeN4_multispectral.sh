@@ -319,8 +319,7 @@ export ITK_GLOBAL_DEFAULT_THREADER=Pool
 
 #BeAST configuration
 BEASTLIBRARY_DIR="${QUARANTINE_PATH}/resources/BEaST_libraries/combined"
-BEAST_CONFIG=${BEASTLIBRARY_DIR}/default.2mm.conf
-BEAST_CONFIG2=${BEASTLIBRARY_DIR}/default.1mm.conf
+BEAST_CONFIG=${BEASTLIBRARY_DIR}/default.1mm.conf
 
 #mni_icbm152_nlin_sym_09c priors as default
 REGISTRATIONMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c.mnc"
@@ -435,6 +434,7 @@ function do_N4_correct {
 }
 
 #Convert classify image into a mask
+#Mostly a clone of the supersteps of the antsBrainExtraction supersteps
 function classify_to_mask {
   #Breakup classification and drop try to exclude small misclassified chunks
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
@@ -448,19 +448,20 @@ function classify_to_mask {
   ImageMath 3 ${tmpdir}/${n}/class2.mnc FillHoles ${tmpdir}/${n}/class2.mnc 2
 
   #Erode CSF to just get any minimal ventical voxels
-  ImageMath 3 ${tmpdir}/${n}/class1.mnc ME ${tmpdir}/${n}/class1.mnc 10
-
-  #ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/bmask.mnc ${tmpdir}/mnimask.mnc
-  cp -f ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc
+  iMath 3 ${tmpdir}/${n}/class1.mnc ME ${tmpdir}/${n}/class1.mnc 10 1 ball 1
 
   mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -labels -or ${tmpdir}/${n}/class2.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/class1.mnc \
-    ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/classifymask2.mnc
-  mv -f ${tmpdir}/${n}/classifymask2.mnc ${tmpdir}/${n}/classifymask.mnc
+    ${tmpdir}/${n}/classifymask.mnc
 
-  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 2
+  iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 2 1 ball 1
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc GetLargestComponent ${tmpdir}/${n}/classifymask.mnc
-  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 4
+  iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 4 1 ball 1
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
+  iMath 3 ${tmpdir}/${n}/bmask_E.mnc ME ${tmpdir}/bmask.mnc 4 1 ball 1
+  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/bmask_E.mnc
+  iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 5 1 ball 1
+  iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 5 1 ball 1
+
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
 
@@ -604,7 +605,8 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [$
 
 #Generate a hotmask using the existing weight mask
 outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/hotmask.mnc
+iMath 3 ${tmpdir}/${n}/mnimask_D.mnc MD ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mnimask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Do a quick kmeans to get gm/wm and make a hard mask for weight
 ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/kmeansmask.mnc
@@ -679,12 +681,18 @@ mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -con
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
 
-#Combine the masks because sometimes beast misses badly biased cerebellum
-ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc
+#BeAST Failure mode of a chunk of almost unattached voxels
+iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/bmask.mnc GetLargestComponent ${tmpdir}/${n}/bmask.mnc
+iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
+
+#Beastmask is mask for this round
+cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
 
 #Generate a hotmask using the existing weight mask
 outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmask.mnc
+iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Do a quick kmeans to get gm/wm and make a hard mask for weight
 ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/kmeansmask.mnc
@@ -747,16 +755,22 @@ iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/$((n - 1))/beastmask.mnc 3 1 
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
-mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG2} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
+mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 antsApplyTransforms -i ${tmpdir}/${n}/beastmask.mnc -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/bmask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [${tmpdir}/${n}/mni0_GenericAffine.xfm,1] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mniaffinemask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+
+#BeAST Failure mode of a chunk of almost unattached voxels
+iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/bmask.mnc GetLargestComponent ${tmpdir}/${n}/bmask.mnc
+iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 
 #Last time beast is run, copy outside loops
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
 #Create extracted model for nonlinear registration
-iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/bmask.mnc 3 1 ball 1
+cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/extractmask.mnc
+iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/extractmask.mnc 3 1 ball 1
 iMath 3 ${tmpdir}/${n}/modelextractmask.mnc MD ${REGISTRATIONBRAINMASK} 3 1 ball 1
 
 #Extract t1
@@ -789,7 +803,7 @@ cp -f ${tmpdir}/${n}/mniaffinemask.mnc ${tmpdir}/mniaffinemask.mnc
 mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
 
 #Expand the mask a bit
-iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 box 1
+iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
@@ -804,8 +818,12 @@ Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [25,0.001]
 #Convert classification to the mask
 classify_to_mask
 
+#Vote a mask
+ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mniaffinemask.mnc ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/bmask.mnc
+
 #Generate outlier mask from white matter mask intensity
-ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/classifymask.mnc
+ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
+ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
 outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Combine GM and WM proabability images into a N4 mask,
@@ -820,11 +838,11 @@ fi
 
 #Clip the classification outputs with the new mask
 for item in ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/SegmentationPosteriors1.mnc ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc; do
-  ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/classifymask.mnc
+  ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/mask2.mnc
   ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/hotmask.mnc
 done
 
-ImageMath 3 ${tmpdir}/${n}/classifymask_nooutlier.mnc m ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
@@ -849,8 +867,8 @@ while true; do
   minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
   #Combine the masks because sometimes beast misses badly biased cerebellum
-  cp -f ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/${n}/mask.mnc
-  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 box 1
+  cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
+  iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
   if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
@@ -863,7 +881,9 @@ while true; do
     -l [0.69314718055994530942,1]
 
   classify_to_mask
-  ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/classifymask.mnc
+  ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/${n}/mask.mnc ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/${n}/classifymask.mnc
+  ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
+  ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
   outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/hotmask.mnc
 
   #Combine GM and WM probably images into a N4 mask,
@@ -878,7 +898,7 @@ while true; do
 
   #Clip the classification weight and posteriors
   for item in ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/SegmentationPosteriors1.mnc ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc; do
-    ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/classifymask.mnc
+    ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/mask2.mnc
     ImageMath 3 ${item} m ${item} ${tmpdir}/${n}/hotmask.mnc
   done
 
@@ -886,7 +906,7 @@ while true; do
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
-  ImageMath 3 ${tmpdir}/${n}/classifymask_nooutlier.mnc m ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/hotmask.mnc
+  ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/hotmask.mnc
 
   do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/classifymask_nooutlier.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4
 
