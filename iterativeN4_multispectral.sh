@@ -555,8 +555,8 @@ ImageMath 3 ${tmpdir}/${n}/t1.mnc m ${tmpdir}/${n}/t1.mnc ${tmpdir}/headmask.mnc
 ExtractRegionFromImageByMask 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/headmask.mnc 1 10
 mv -f ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/${n}/t1.mnc
 
-#Initial threshold of greater than 0.5 of mean intensity
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
+#Initial threshold of greater than 0.75*otsu threshold
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.75*$(mincstats -quiet -floor 1e-6 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 
