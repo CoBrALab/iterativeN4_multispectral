@@ -982,19 +982,22 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(3276
 
 #Denoise output if requested
 if [[ ${_arg_denoise} == "on" ]]; then
-  minc_anlm ${N4_VERBOSE:+--verbose} --rician --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/corrected.mnc ${output}
+  minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/corrected.norm.mnc ${tmpdir}/corrected.norm.denoise.mnc
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/corrected.norm.denoise.mnc ${output}
 else
-  cp -f ${tmpdir}/corrected.mnc ${output}
+  cp -f ${tmpdir}/corrected.norm.mnc ${output}
 fi
 
 #Output final classification files if standalone
 if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
-  cp -f ${tmpdir}/finalbmask.mnc $(dirname ${output})/$(basename ${output} .mnc).beastmask.mnc
-  cp -f ${tmpdir}/finalmnimask.mnc $(dirname ${output})/$(basename ${output} .mnc).mnimask.mnc
-  cp -f ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
-  cp -f ${tmpdir}/finalmask.mnc $(dirname $output)/$(basename ${output} .mnc).mask.mnc
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
-  ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc ${tmpdir}/finalmask.mnc 1 10
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalbmask.mnc $(dirname ${output})/$(basename ${output} .mnc).beastmask.mnc
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalmnimask.mnc $(dirname ${output})/$(basename ${output} .mnc).mnimask.mnc
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalmask.mnc $(dirname $output)/$(basename ${output} .mnc).mask.mnc
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalclassifymask.mnc $(dirname $output)/$(basename ${output} .mnc).classifymask.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
+  ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc ${tmpdir}/output.extracted.crop.mnc ${tmpdir}/finalmask.mnc 1 10
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/output.extracted.crop.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc
 fi
 
 if [[ ${_arg_debug} == "off" ]]; then
