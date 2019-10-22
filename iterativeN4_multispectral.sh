@@ -373,9 +373,9 @@ function outlier_mask() {
   local threshold
 
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
-  median=$(mincstats -quiet -median -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  median=$(mincstats -quiet -median -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
   threshold=$(calc "${median}+3*(${pct75}-${pct25})")
 
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>${threshold}?1:0" ${outlier_input} ${outlier_output}
@@ -408,8 +408,8 @@ function do_N4_correct() {
   min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 10000 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
