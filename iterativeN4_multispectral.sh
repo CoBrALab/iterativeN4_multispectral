@@ -417,8 +417,6 @@ function do_N4_correct() {
     -i ${n4input} \
     -o [ ${n4corrected},${n4bias} ] -r 0
 
-  iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
-
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${n4bias})
   if ((n == 0)); then
     cp -f ${n4bias} ${tmpdir}/${n}/iterative_bias.mnc
@@ -426,6 +424,7 @@ function do_N4_correct() {
     ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias.mnc
     ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
   else
+    iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
     #Update ongoing bias field estimate
     ImageMath 3 ${tmpdir}/${n}/iterative_bias.mnc m ${tmpdir}/$((n - 1))/iterative_bias.mnc ${n4bias}
     #Rescale estimate to be mean 1 inside brain
