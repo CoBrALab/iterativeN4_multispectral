@@ -434,7 +434,7 @@ function do_N4_correct() {
     ImageMath 3 ${tmpdir}/${n}/wholebrain_bias_apply.mnc / ${tmpdir}/wholebrain_bias.mnc $(mincstats -quiet -mean -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias.mnc)
     ImageMath 3 ${tmpdir}/${n}/iterative_bias_apply.mnc addtozero ${tmpdir}/${n}/iterative_bias_apply.mnc ${tmpdir}/${n}/wholebrain_bias_apply.mnc
     #Correct original input brain
-    ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias.mnc
+    ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias_apply.mnc
     #Normalize and rescale intensity
     n4brainmean=$(mincstats -quiet -mean -mask ${n4meanmask} -mask_binvalue 1 ${n4corrected})
     minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(32767*A[0]/${n4brainmean},0,65535)" \
