@@ -852,11 +852,11 @@ mv -f ${tmpdir}/${n}/modelextracted2.mnc ${tmpdir}/${n}/modelextracted.mnc
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/nonlin ] \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
-  --use-histogram-matching 0 \
+  --use-histogram-matching 1 \
   --transform SyN[ 0.1,3,0 ] \
-  --metric Mattes[ ${tmpdir}/${n}/modelextracted.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,256,None ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x675x225x75x25,1e-6,10 ] \
-  --shrink-factors 8x8x8x8x8x8x8x8x8x7x6x5x4x3x2x1x1 \
+  --metric CC[ ${tmpdir}/${n}/modelextracted.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2,None ] \
+  --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x675x225x75x25,1e-5,10 ] \
+  --shrink-factors 8x8x8x8x8x8x8x8x8x7x6x5x4x3x2x2x2 \
   --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm
 
 #Resample MNI Priors to Native space for classification
