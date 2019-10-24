@@ -836,12 +836,17 @@ cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
 #Create extracted model for nonlinear registration
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/extractmask.mnc
-iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/extractmask.mnc 3 1 ball 1
-iMath 3 ${tmpdir}/${n}/modelextractmask.mnc MD ${REGISTRATIONBRAINMASK} 3 1 ball 1
+iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/extractmask.mnc 2 1 ball 1
+iMath 3 ${tmpdir}/${n}/modelextractmask.mnc MD ${REGISTRATIONBRAINMASK} 2 1 ball 1
 
 #Extract t1
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression 'A[0]*A[1]' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/extractmask.mnc ${tmpdir}/${n}/t1.extracted.mnc
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression 'A[0]*A[1]' ${REGISTRATIONMODEL} ${tmpdir}/${n}/modelextractmask.mnc ${tmpdir}/${n}/modelextracted.mnc
+
+ImageMath 3 ${tmpdir}/${n}/modelextracted.mnc PadImage ${REGISTRATIONMODEL} 50
+antsApplyTransforms -i ${tmpdir}/${n}/modelextractmask.mnc -r ${tmpdir}/${n}/modelextracted.mnc -o ${tmpdir}/${n}/modelextractmask.mnc -n GenericLabel ${N4_VERBOSE:+--verbose} -d 3
+ImageMath 3 ${tmpdir}/${n}/modelextracted.mnc m ${tmpdir}/${n}/modelextracted.mnc ${tmpdir}/${n}/modelextractmask.mnc
+ExtractRegionFromImageByMask 3 ${tmpdir}/${n}/modelextracted.mnc ${tmpdir}/${n}/modelextracted2.mnc ${tmpdir}/${n}/modelextractmask.mnc 1 10
+mv -f ${tmpdir}/${n}/modelextracted2.mnc ${tmpdir}/${n}/modelextracted.mnc
 
 #Non linearly register priors
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
