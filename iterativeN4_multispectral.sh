@@ -520,6 +520,10 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
+mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.15
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
 
@@ -553,21 +557,8 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
 ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
 ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
 
-#Resample into subject space, zero background and recrop
-ImageMath 3 ${input} PadImage ${input} 50
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
-ImageMath 3 ${input} m ${input} ${tmpdir}/headmask.mnc
-ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/headmask.mnc 1 10
-mv -f ${tmpdir}/input.crop.mnc ${input}
-
-#Zero and recrop the input file as well for stages going forward
-ImageMath 3 ${tmpdir}/${n}/t1.mnc PadImage ${tmpdir}/${n}/t1.mnc 50
-ImageMath 3 ${tmpdir}/${n}/t1.mnc m ${tmpdir}/${n}/t1.mnc ${tmpdir}/headmask.mnc
-ExtractRegionFromImageByMask 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/headmask.mnc 1 10
-mv -f ${tmpdir}/${n}/t1.crop.mnc ${tmpdir}/${n}/t1.mnc
-
-#Initial threshold of greater than 0.75*otsu threshold
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.75*$(mincstats -quiet -floor 1e-6 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
+#Initial threshold of greater than 0.5*otsu threshold
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.5*$(mincstats -quiet -floor 1e-6 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
 #Use exclude mask if provided
@@ -581,8 +572,28 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
+mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/weight.mnc 0.1
+
+#Resample headmask into subject space, zero background and recrop
+ImageMath 3 ${input} PadImage ${input} 50
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
+ImageMath 3 ${input} m ${input} ${tmpdir}/headmask.mnc
+ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/headmask.mnc 1 10
+mv -f ${tmpdir}/input.crop.mnc ${input}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
+
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/corrected.mnc -o ${tmpdir}/${n}/corrected.mnc -r ${input}
+ImageMath 3 ${tmpdir}/${n}/corrected.mnc m ${tmpdir}/${n}/corrected.mnc ${tmpdir}/headmask.mnc
+
+mincresample -quiet ${N4_VERBOSE:+-verbose} -clobber -like ${input} ${tmpdir}/wholebrain_bias.mnc ${tmpdir}/wholebrain_bias_crop.mnc
+mincresample -quiet ${N4_VERBOSE:+-verbose} -clobber -like ${input} ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias_crop.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
+mv -f ${tmpdir}/${n}/iterative_bias_crop.mnc ${tmpdir}/${n}/iterative_bias.mnc
 
 ################################################################################
 #Round 1, N4 over kmeans estimates WM/GM mask using model affine brainmask
