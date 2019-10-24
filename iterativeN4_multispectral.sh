@@ -372,6 +372,7 @@ function outlier_mask() {
   local pct75
   local threshold
 
+  #Calculate outliers as >median+3*IQR
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
   median=$(mincstats -quiet -median -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
   pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
@@ -414,18 +415,22 @@ function do_N4_correct() {
   pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
+  #Estimate bias field
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
     -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ ${n4fwhm},0.01,${histbins} ] \
     -i ${n4input} \
     -o [ ${n4corrected},${n4bias} ] -r 0
 
+  #Normalize to mean 1
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${n4bias})
   if ((n == 0)); then
+    #First round we don't do any fancy rescaling
     cp -f ${n4bias} ${tmpdir}/${n}/iterative_bias.mnc
     cp -f ${n4bias} ${tmpdir}/wholebrain_bias.mnc
     ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias.mnc
     ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
   else
+    #Generate a mask to use for inside vs outside brain rescale
     iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
     #Update ongoing bias field estimate
     ImageMath 3 ${tmpdir}/${n}/iterative_bias.mnc m ${tmpdir}/$((n - 1))/iterative_bias.mnc ${n4bias}
@@ -503,7 +508,7 @@ else
 fi
 
 ################################################################################
-#Round 0, do a precorrection, then form mask from 75% of Otsu threshold
+#Round 0, do a precorrection, then form mask from 50% of Otsu threshold
 #Also estimate headmask and crop the internal files
 ################################################################################
 n=0
@@ -520,6 +525,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+#Remove high noise background voxels
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
 mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
@@ -572,6 +578,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+#Remove high noise background voxels
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
 mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
@@ -639,10 +646,10 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
   --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/headmask.mnc ]
 
+#Generate a mask from the model 50% WM/GM probailities
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mnimask.mnc
-
 iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 3 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
 iMath 3 ${tmpdir}/${n}/mnimask.mnc ME ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
@@ -717,6 +724,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
 
 #Make MNI-space copy of brain for BeAST
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
+
 #BSpline[ 5 ] does weird things to intensity, clip back to positive range
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
@@ -730,7 +738,7 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 #Run a quick beast to get a brain mask
 mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
-#Resample beast mask and MNI mask to native space
+#Generate a mask from the model 50% WM/GM probailities
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mnimask.mnc
@@ -738,7 +746,7 @@ iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 3 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
 iMath 3 ${tmpdir}/${n}/mnimask.mnc ME ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
 
-
+#Resample beast mask and MNI mask to native space
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
 
 #BeAST Failure mode of a chunk of almost unattached voxels
@@ -746,7 +754,6 @@ iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/bmask.mnc GetLargestComponent ${tmpdir}/${n}/bmask.mnc
 iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 
-#Beastmask is mask for this round
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
 
 #Generate a hotmask using the existing weight mask
@@ -819,6 +826,7 @@ mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -con
 
 antsApplyTransforms -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/bmask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 
+#Generate a mask from the model 50% WM/GM probailities
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mniaffinemask.mnc
@@ -943,7 +951,6 @@ while true; do
 
   minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
-  #Combine the masks because sometimes beast misses badly biased cerebellum
   cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
   iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
@@ -958,6 +965,7 @@ while true; do
     -l [ 0.69314718055994530942,1 ]
 
   classify_to_mask
+  #Form a new mask from voting prior masks
   ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/${n}/mask.mnc ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/${n}/classifymask.mnc
   ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
   ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
