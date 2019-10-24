@@ -381,6 +381,7 @@ function outlier_mask() {
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>${threshold}?1:0" ${outlier_input} ${outlier_output}
   mincdefrag ${outlier_output} $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc 1 6 1
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]?0:1" $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc ${outlier_output}
+  rm -f $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc ${tmpdir}/${n}/outlier_mask.mnc
 }
 
 #Function used to do bias field correction
