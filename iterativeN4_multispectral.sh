@@ -404,6 +404,7 @@ function do_N4_correct() {
   local npoints
   local histbins
   local n4brainmean
+  local n4nonbrainmean
 
   #Calculate bins for N4 with Freedman-Diaconis’s Rule
   min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
@@ -432,14 +433,16 @@ function do_N4_correct() {
     ImageMath 3 ${tmpdir}/${n}/iterative_bias.mnc / ${tmpdir}/${n}/iterative_bias.mnc $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${tmpdir}/${n}/iterative_bias.mnc)
     #Combine wholebrain estiamtes from first round with within-brain estimate
     ImageMath 3 ${tmpdir}/${n}/iterative_bias_apply.mnc m ${tmpdir}/${n}/iterative_bias.mnc $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc
-    ImageMath 3 ${tmpdir}/${n}/wholebrain_bias_apply.mnc / ${tmpdir}/wholebrain_bias.mnc $(mincstats -quiet -mean -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias.mnc)
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -double -expression "A[0]/$(mincstats -quiet -mean -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias_crop.mnc)" ${tmpdir}/wholebrain_bias_crop.mnc ${tmpdir}/${n}/wholebrain_bias_apply.mnc
     ImageMath 3 ${tmpdir}/${n}/iterative_bias_apply.mnc addtozero ${tmpdir}/${n}/iterative_bias_apply.mnc ${tmpdir}/${n}/wholebrain_bias_apply.mnc
+    ImageMath 3 ${tmpdir}/${n}/iterative_bias_apply.mnc addtozero ${tmpdir}/${n}/iterative_bias_apply.mnc 1
     #Correct original input brain
     ImageMath 3 ${n4corrected} / ${input} ${tmpdir}/${n}/iterative_bias_apply.mnc
     #Normalize and rescale intensity
     n4brainmean=$(mincstats -quiet -mean -mask ${n4meanmask} -mask_binvalue 1 ${n4corrected})
-    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(32767*A[0]/${n4brainmean},0,65535)" \
-      ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+    n4nonbrainmean=$(mincstats -quiet -floor 10 -mean -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected})
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?clamp(32767*A[0]/${n4brainmean},0,65535):clamp(16384*A[0]/${n4nonbrainmean},0,65535)" \
+      ${n4corrected} $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
   fi
   mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 }
@@ -960,12 +963,12 @@ mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} -keep ${
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} -keep ${tmpdir}/wholebrain_bias.mnc ${tmpdir}/wholebrain_bias_final.mnc
 
 #Do the final correction
-iMath 3 ${tmpdir}/finalmask_D.mnc MD ${tmpdir}/finalmask.mnc 2 1 ball 1
+iMath 3 ${tmpdir}/finalmask_D.mnc MD ${tmpdir}/finalmask.mnc 1 1 ball 1
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -labels -near -like ${originput} ${tmpdir}/finalmask_D.mnc ${tmpdir}/finalmask_D_resample.mnc
 mv -f ${tmpdir}/finalmask_D_resample.mnc ${tmpdir}/finalmask_D.mnc
 ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc m ${tmpdir}/iterative_bias_final.mnc ${tmpdir}/finalmask_D.mnc
-ImageMath 3 ${tmpdir}/wholebrain_bias_final.mnc / ${tmpdir}/wholebrain_bias_final.mnc $(mincstats -quiet -mean -mask ${tmpdir}/finalmask_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias_final.mnc)
-ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc addtozero ${tmpdir}/iterative_bias_apply_final.mnc ${tmpdir}/wholebrain_bias_final.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -double -expression "A[0]/$(mincstats -quiet -mean -mask ${tmpdir}/finalmask_D.mnc -mask_binvalue 0 ${tmpdir}/wholebrain_bias_final.mnc)" ${tmpdir}/wholebrain_bias_final.mnc ${tmpdir}/wholebrain_bias_apply_final.mnc
+ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc addtozero ${tmpdir}/iterative_bias_apply_final.mnc ${tmpdir}/wholebrain_bias_apply_final.mnc
 ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc addtozero ${tmpdir}/iterative_bias_apply_final.mnc 1
 
 ImageMath 3 ${tmpdir}/corrected.mnc / ${originput} ${tmpdir}/iterative_bias_apply_final.mnc
@@ -975,8 +978,9 @@ mv -f ${tmpdir}/finalclass3_resample.mnc ${tmpdir}/finalclass3.mnc
 
 #Normalize and rescale intensity
 n4brainmean=$(mincstats -quiet -mean -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${tmpdir}/corrected.mnc)
-minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(32767*A[0]/${n4brainmean},0,65535)" \
-  ${tmpdir}/corrected.mnc ${tmpdir}/corrected.norm.mnc
+n4nonbrainmean=$(mincstats -quiet -floor 10 -mean -mask ${tmpdir}/finalmask_D.mnc -mask_binvalue 0 ${tmpdir}/corrected.mnc)
+minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?clamp(32767*A[0]/${n4brainmean},0,65535):clamp(16384*A[0]/${n4nonbrainmean},0,65535)" \
+  ${tmpdir}/corrected.mnc ${tmpdir}/finalmask_D.mnc ${tmpdir}/corrected.norm.mnc
 
 #Denoise output if requested
 if [[ ${_arg_denoise} == "on" ]]; then
