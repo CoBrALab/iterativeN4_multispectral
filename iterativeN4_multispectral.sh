@@ -530,28 +530,28 @@ minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF
 #First try registration to MNI space to get headmask
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
-  --use-histogram-matching 0 \
+  --use-histogram-matching 1 \
   --initial-moving-transform [ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1 ] \
   --transform Translation[ 0.5 ] \
   --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 16x15x14x13x12x11 \
-  --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317mm \
-  --transform Rigid[ 0.25 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,37,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 13x12x11x10x9x8 \
-  --smoothing-sigmas 11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023mm \
-  --transform Similarity[ 0.125 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x4 \
+  --smoothing-sigmas 13.5891488046x6.7945744023x3.39728720115mm \
+  --transform Rigid[ 0.5 ] \
   --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 10x9x8x7x6x5 \
-  --smoothing-sigmas 8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144mm \
-  --transform Affine[ 0.1 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 7x6x5x4x3x2 \
-  --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x4x2 \
+  --smoothing-sigmas 6.7945744023x3.39728720115x1.69864360058mm \
+  --transform Similarity[ 0.25 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,128,Regular,0.5 ] \
+  --convergence [ 2025x2025x750,1e-6,10 ] \
+  --shrink-factors 4x2x1 \
+  --smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288mm \
+  --transform Affine[ 0.125 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5 ] \
+  --convergence [ 2025x2025,1e-6,10 ] \
+  --shrink-factors 4x2 \
+  --smoothing-sigmas 3.39728720115x1.69864360058mm
 
 #Generate model headmask
 ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
@@ -606,20 +606,38 @@ minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} 
 #First try registration to MNI space, multistep
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
-  --use-histogram-matching 0 \
+  --use-histogram-matching 1 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[ 0.1 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5 ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 7x6x5x4x3x2 \
-  --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
-  --masks [ NULL,NULL ] \
-  --transform Affine[ 0.1 ] \
+  --transform Translation[ 0.5 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x8 \
+  --smoothing-sigmas 13.5891488046x11.890505204x10.1918616035mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform Rigid[ 0.5 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x8 \
+  --smoothing-sigmas 11.890505204x10.1918616035x8.49321800288mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform Similarity[ 0.25 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,43,Regular,0.5 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x8 \
+  --smoothing-sigmas 10.1918616035x8.49321800288x6.7945744023mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform Affine[ 0.125 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.75 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x6 \
+  --smoothing-sigmas 8.49321800288x6.7945744023x5.09593080173mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform Affine[ 0.0625 ] \
   --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None ] \
-  --convergence [ 2025x2025x2025x750x250,1e-6,20 ] \
-  --shrink-factors 4x3x2x1x1 \
-  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
-  --masks [ ${REGISTRATIONBRAINMASK},NULL ]
+  --convergence [ 2025x2025x250,1e-6,20 ] \
+  --shrink-factors 4x2x1 \
+  --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
+  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/headmask.mnc ]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
@@ -670,14 +688,26 @@ minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} 
 #Register to MNI space
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
-  --use-histogram-matching 0 \
+  --use-histogram-matching 1 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[ 0.1 ] \
+  --transform Similarity[ 0.25 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,43,Regular,0.5 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x8 \
+  --smoothing-sigmas 10.1918616035x8.49321800288x6.7945744023mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform Affine[ 0.125 ] \
+  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.75 ] \
+  --convergence [ 2025x2025x2025,1e-6,10 ] \
+  --shrink-factors 8x8x6 \
+  --smoothing-sigmas 8.49321800288x6.7945744023x5.09593080173mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform Affine[ 0.0625 ] \
   --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None ] \
-  --convergence [ 2025x2025x2025x750x250,1e-6,20 ] \
-  --shrink-factors 4x3x2x1x1 \
-  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
-  --masks [ ${REGISTRATIONBRAINMASK},NULL ]
+  --convergence [ 2025x2025x250,1e-6,20 ] \
+  --shrink-factors 4x2x1 \
+  --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
+  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mnimask.mnc ]
 
 #Bring MNI mask to native space affinely
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
@@ -755,14 +785,14 @@ minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} 
 #Affine register to MNI space, tweak registration
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
-  --use-histogram-matching 0 \
+  --use-histogram-matching 1 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Affine[ 0.05 ] \
+  --transform Affine[ 0.0625 ] \
   --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None ] \
-  --convergence [ 2025x2025x2025x750x250,1e-6,20 ] \
-  --shrink-factors 4x3x2x1x1 \
-  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
-  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask_D.mnc ]
+  --convergence [ 2025x2025x250,1e-6,20 ] \
+  --shrink-factors 4x2x1 \
+  --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
+  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask.mnc ]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
