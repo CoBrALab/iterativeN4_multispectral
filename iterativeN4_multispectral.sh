@@ -639,7 +639,13 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
   --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/headmask.mnc ]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mnimask.mnc
+
+iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 3 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
+iMath 3 ${tmpdir}/${n}/mnimask.mnc ME ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
 
 #Generate a hotmask using the existing weight mask
 outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/hotmask.mnc
@@ -709,9 +715,6 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
   --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mnimask.mnc ]
 
-#Bring MNI mask to native space affinely
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
-
 #Make MNI-space copy of brain for BeAST
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 #BSpline[ 5 ] does weird things to intensity, clip back to positive range
@@ -728,7 +731,14 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 #Resample beast mask and MNI mask to native space
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mnimask.mnc
+iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 3 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
+iMath 3 ${tmpdir}/${n}/mnimask.mnc ME ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
+
+
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
 
 #BeAST Failure mode of a chunk of almost unattached voxels
@@ -808,7 +818,13 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 antsApplyTransforms -i ${tmpdir}/${n}/beastmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/bmask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
-antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mniaffinemask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mniaffinemask.mnc
+iMath 3 ${tmpdir}/${n}/mniaffinemask.mnc MD ${tmpdir}/${n}/mniaffinemask.mnc 3 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/mniaffinemask.mnc FillHoles ${tmpdir}/${n}/mniaffinemask.mnc 2
+iMath 3 ${tmpdir}/${n}/mniaffinemask.mnc ME ${tmpdir}/${n}/mniaffinemask.mnc 1 1 ball 1
 
 #BeAST Failure mode of a chunk of almost unattached voxels
 iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
@@ -845,13 +861,18 @@ antsApplyTransforms -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 
 
 #Masks
 antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/SegmentationPrior3.mnc ${tmpdir}/${n}/SegmentationPrior2.mnc ${tmpdir}/${n}/mniprobmask.mnc
+iMath 3 ${tmpdir}/${n}/mniprobmask.mnc MD ${tmpdir}/${n}/mniprobmask.mnc 3 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/mniprobmask.mnc FillHoles ${tmpdir}/${n}/mniprobmask.mnc 2
+iMath 3 ${tmpdir}/${n}/mniprobmask.mnc ME ${tmpdir}/${n}/mniprobmask.mnc 1 1 ball 1
+
 
 #Last time we generate MNI mask, save it outside iterations
-cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
+cp -f ${tmpdir}/${n}/mniprobmask.mnc ${tmpdir}/mnimask.mnc
 cp -f ${tmpdir}/${n}/mniaffinemask.mnc ${tmpdir}/mniaffinemask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
-mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mniprobmask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
 
 #Expand the mask a bit
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
@@ -870,7 +891,7 @@ Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 25,0.001
 classify_to_mask
 
 #Vote a mask
-ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mniaffinemask.mnc ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/bmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/${n}/mniaffinemask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mniprobmask.mnc
 
 #Generate outlier mask from white matter mask intensity
 ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
