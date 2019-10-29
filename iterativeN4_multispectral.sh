@@ -1048,6 +1048,9 @@ ImageMath 3 ${tmpdir}/iterative_bias_apply_final.mnc addtozero ${tmpdir}/iterati
 
 ImageMath 3 ${tmpdir}/corrected.mnc / ${originput} ${tmpdir}/iterative_bias_apply_final.mnc
 
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -labels -near -like ${tmpdir}/corrected.mnc ${tmpdir}/finalmask_D.mnc ${tmpdir}/finalmask_D_resample.mnc
+mv -f ${tmpdir}/finalmask_D_resample.mnc ${tmpdir}/finalmask_D.mnc
+
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -keep -labels -near -like ${tmpdir}/corrected.mnc ${tmpdir}/finalclass3.mnc ${tmpdir}/finalclass3_resample.mnc
 mv -f ${tmpdir}/finalclass3_resample.mnc ${tmpdir}/finalclass3.mnc
 
