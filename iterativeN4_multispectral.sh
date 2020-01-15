@@ -368,21 +368,19 @@ function outlier_mask() {
   local outlier_output=$3
 
   local median
-  local pct25
-  local pct75
-  local threshold
+  local mad
 
-  #Calculate outliers as >median+3*IQR
+  itk_vesselness --clobber --rescale --scales 8 ${outlier_input} ${tmpdir}/${n}/vessels.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>50?0:1' ${tmpdir}/${n}/vessels.mnc ${tmpdir}/${n}/vesselmask.mnc
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
+  ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc m ${tmpdir}/${n}/outlier_mask.mnc ${tmpdir}/${n}/vesselmask.mnc
   median=$(mincstats -quiet -median -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
-  threshold=$(calc "${median}+3*(${pct75}-${pct25})")
 
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>${threshold}?1:0" ${outlier_input} ${outlier_output}
-  mincdefrag ${outlier_output} $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc 1 6 1
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]?0:1" $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc ${outlier_output}
-  rm -f $(dirname ${outlier_output})/$(basename ${outlier_output} .mnc).defrag.mnc ${tmpdir}/${n}/outlier_mask.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
+  mad=$(mincstats -quiet -median -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
+
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "((0.6745*(A[0]-${median}))/${mad})>4.5?0:1" ${outlier_input} ${outlier_output}
+  ImageMath 3 ${outlier_output} m ${outlier_output} ${tmpdir}/${n}/vesselmask.mnc
 }
 
 #Function used to do bias field correction
