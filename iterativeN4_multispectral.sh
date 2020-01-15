@@ -420,7 +420,7 @@ function do_N4_correct() {
     -o [ ${n4corrected},${n4bias} ] -r 0
 
   #Normalize to mean 1
-  ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -mean -mask ${n4brainmask} -mask_binvalue 1 -quiet ${n4bias})
+  ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
   if ((n == 0)); then
     #First round we don't do any fancy rescaling
     cp -f ${n4bias} ${tmpdir}/${n}/iterative_bias.mnc
