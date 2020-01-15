@@ -415,7 +415,7 @@ function do_N4_correct() {
 
   #Estimate bias field
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-    -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ ${n4fwhm},0.01,${histbins} ] \
+    -b [ 200 ] -c [ 300x300x300x300,1e-6 ] --histogram-sharpening [ ${n4fwhm},0.01,${histbins} ] \
     -i ${n4input} \
     -o [ ${n4corrected},${n4bias} ] -r 0
 
