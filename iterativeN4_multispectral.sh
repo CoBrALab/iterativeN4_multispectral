@@ -411,7 +411,7 @@ function do_N4_correct() {
   npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
+  histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(${n4shrink}**3))**(-1.0/3.0)) ))")
 
   #Estimate bias field
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
