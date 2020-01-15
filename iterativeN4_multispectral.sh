@@ -453,31 +453,20 @@ function do_N4_correct() {
 #Convert classify image into a mask
 #Mostly a clone of the supersteps of the antsBrainExtraction supersteps
 function classify_to_mask() {
-  #Breakup classification and drop try to exclude small misclassified chunks
-  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
-  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class2.mnc 2 2 1 0
-  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class1.mnc 1 1 1 0
-  #Get largest component
-  ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
-  ImageMath 3 ${tmpdir}/${n}/class2.mnc GetLargestComponent ${tmpdir}/${n}/class2.mnc
+  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/gm.mnc 2 2 1 0
+  ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/wm.mnc 3 3 1 0
 
-  #Fill holes in GM
-  ImageMath 3 ${tmpdir}/${n}/class2.mnc FillHoles ${tmpdir}/${n}/class2.mnc 2
+  ImageMath 3 ${tmpdir}/${n}/gm.mnc GetLargestComponent ${tmpdir}/${n}/gm.mnc
+  ImageMath 3 ${tmpdir}/${n}/wm.mnc GetLargestComponent ${tmpdir}/${n}/wm.mnc
 
-  #Erode CSF to just get any minimal ventical voxels
-  iMath 3 ${tmpdir}/${n}/class1.mnc ME ${tmpdir}/${n}/class1.mnc 10 1 ball 1
+  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/gm.mnc ${tmpdir}/${n}/wm.mnc
 
-  mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -labels -or ${tmpdir}/${n}/class2.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/class1.mnc \
-    ${tmpdir}/${n}/classifymask.mnc
-
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 2 1 ball 1
+  iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 1 1 ball 1
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc GetLargestComponent ${tmpdir}/${n}/classifymask.mnc
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 4 1 ball 1
+  iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 2 1 ball 1
+  iMath 3 ${tmpdir}/bmask_E.mnc ME ${tmpdir}/mnimask.mnc 10 1 ball 1
+  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/bmask_E.mnc
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
-  iMath 3 ${tmpdir}/${n}/bmask_E.mnc ME ${tmpdir}/bmask.mnc 4 1 ball 1
-  ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/bmask_E.mnc
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 5 1 ball 1
-  iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 5 1 ball 1
 
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
