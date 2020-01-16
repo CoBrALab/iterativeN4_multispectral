@@ -583,10 +583,7 @@ mv -f ${tmpdir}/${n}/bias_resample.mnc ${tmpdir}/${n}/bias.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/corrected.mnc -o ${tmpdir}/${n}/corrected.mnc -r ${input}
 ImageMath 3 ${tmpdir}/${n}/corrected.mnc m ${tmpdir}/${n}/corrected.mnc ${tmpdir}/headmask.mnc
 
-mincresample -quiet ${N4_VERBOSE:+-verbose} -clobber -like ${input} ${tmpdir}/wholebrain_bias.mnc ${tmpdir}/wholebrain_bias_crop.mnc
-mincresample -quiet ${N4_VERBOSE:+-verbose} -clobber -like ${input} ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias_crop.mnc
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
-mv -f ${tmpdir}/${n}/iterative_bias_crop.mnc ${tmpdir}/${n}/iterative_bias.mnc
 
 ################################################################################
 #Round 1, N4 over kmeans estimates WM/GM mask using model affine brainmask
