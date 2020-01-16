@@ -622,36 +622,24 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
   --use-histogram-matching 1 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Translation[ 0.5 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x8 \
-  --smoothing-sigmas 13.5891488046x11.890505204x10.1918616035mm \
-  --masks [ NOMASK,NOMASK ] \
-  --transform Rigid[ 0.5 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x8 \
-  --smoothing-sigmas 11.890505204x10.1918616035x8.49321800288mm \
-  --masks [ NOMASK,NOMASK ] \
   --transform Similarity[ 0.25 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,43,Regular,0.5 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x8 \
-  --smoothing-sigmas 10.1918616035x8.49321800288x6.7945744023mm \
-  --masks [ NOMASK,NOMASK ] \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,85,Regular,0.5 ] \
+    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x7x7x6x5x4 \
+    --smoothing-sigmas 7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
+    --masks [ NOMASK,NOMASK ] \
   --transform Affine[ 0.125 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.75 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x6 \
-  --smoothing-sigmas 8.49321800288x6.7945744023x5.09593080173mm \
-  --masks [ NOMASK,NOMASK ] \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,256,Regular,0.75 ] \
+    --convergence [ 2025x2025x2025x675x225x75,1e-6,10 ] \
+    --shrink-factors 6x5x4x3x2x1 \
+    --smoothing-sigmas 5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288mm \
+    --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/headmask.mnc ] \
   --transform Affine[ 0.0625 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None ] \
-  --convergence [ 2025x2025x250,1e-6,20 ] \
-  --shrink-factors 4x2x1 \
-  --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
-  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/headmask.mnc ]
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,256,None ] \
+    --convergence [ 2025x2025x675x225x75x25,1e-6,10 ] \
+    --shrink-factors 5x4x3x2x1x1 \
+    --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+    --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/headmask.mnc ]
 
 #Generate a mask from the model 50% WM/GM probailities
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
@@ -711,24 +699,12 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
   --use-histogram-matching 1 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
-  --transform Similarity[ 0.25 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,43,Regular,0.5 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x8 \
-  --smoothing-sigmas 10.1918616035x8.49321800288x6.7945744023mm \
-  --masks [ NOMASK,NOMASK ] \
-  --transform Affine[ 0.125 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.75 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x6 \
-  --smoothing-sigmas 8.49321800288x6.7945744023x5.09593080173mm \
-  --masks [ NOMASK,NOMASK ] \
   --transform Affine[ 0.0625 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None ] \
-  --convergence [ 2025x2025x250,1e-6,20 ] \
-  --shrink-factors 4x2x1 \
-  --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
-  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mnimask.mnc ]
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,256,None ] \
+    --convergence [ 2025x2025x675x225x75x25,1e-7,10 ] \
+    --shrink-factors 5x4x3x2x1x1 \
+    --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+    --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/$((n - 1))/weight.mnc ]
 
 #Make MNI-space copy of brain for BeAST
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
@@ -814,11 +790,11 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --use-histogram-matching 1 \
   --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
   --transform Affine[ 0.0625 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,None ] \
-  --convergence [ 2025x2025x250,1e-6,20 ] \
+  --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,256,None ] \
+  --convergence [ 2025x2025x250,1e-7,10 ] \
   --shrink-factors 4x2x1 \
   --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
-  --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask.mnc ]
+  --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/$((n - 1))/mask2.mnc ]
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
@@ -871,10 +847,17 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
   --use-histogram-matching 1 \
   --transform SyN[ 0.1,3,0 ] \
-  --metric CC[ ${tmpdir}/${n}/modelextracted.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2,None ] \
-  --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x675x225x75x25,1e-5,10 ] \
-  --shrink-factors 8x8x8x8x8x8x8x8x8x7x6x5x4x3x2x2x2 \
-  --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm
+  --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2 ] \
+  --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x0,1e-6,10 ] \
+  --shrink-factors 7x7x7x7x7x7x7x7x7x7x6x5x4x1 \
+  --smoothing-sigmas 13.5891488046x12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x0mm \
+  --masks [ NOMASK,NOMASK ] \
+  --transform SyN[ 0.1,3,0 ] \
+  --metric CC[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,2 ] \
+  --convergence [ 2025x675x225x0,1e-5,10 ] \
+  --shrink-factors 4x3x2x1 \
+  --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0mm \
+  --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/${n}/mask.mnc ]
 
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
