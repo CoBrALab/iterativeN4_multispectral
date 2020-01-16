@@ -496,74 +496,98 @@ mkdir -p ${tmpdir}/${n}
 
 minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
 
-#Initial threshold of greater than 0.5 of mean intensity
-ImageMath 3 ${tmpdir}/${n}/weight.mnc ThresholdAtMean ${tmpdir}/${n}/t1.mnc 0.5
+ceil=$(mincstats -floor 1.01 -quiet -bins 4096 -pctT 95 ${tmpdir}/${n}/t1.mnc)
+floor=$(mincstats -ceil ${ceil} -quiet -bins 4096 -pctT 0.05 ${tmpdir}/${n}/t1.mnc)
+
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.005*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mean ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.5*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
-#Remove high noise background voxels
-iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
-mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
 do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
 
+#Generate model headmask
+ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
+ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
+ImageMath 3 ${tmpdir}/cropmodel.mnc PadImage ${REGISTRATIONMODEL} 50
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc \
+  -o ${tmpdir}/modelheadmask.mnc -r ${tmpdir}/cropmodel.mnc -n GenericLabel
+
+ExtractRegionFromImageByMask 3 ${tmpdir}/cropmodel.mnc ${tmpdir}/recrop.mnc ${tmpdir}/modelheadmask.mnc 1 30
+cp -f ${tmpdir}/recrop.mnc ${tmpdir}/cropmodel.mnc
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc \
+  -o ${tmpdir}/modelheadmask.mnc -r ${tmpdir}/cropmodel.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${REGISTRATIONBRAINMASK} \
+  -o ${tmpdir}/modelbrainmask.mnc -r ${tmpdir}/cropmodel.mnc -n GenericLabel
+
+
 #First try registration to MNI space to get headmask
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
   --use-histogram-matching 1 \
-  --initial-moving-transform [ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1 ] \
+  --initial-moving-transform [ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1 ] \
   --transform Translation[ 0.5 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x8x4 \
-  --smoothing-sigmas 13.5891488046x6.7945744023x3.39728720115mm \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,37,Regular,0.25 ] \
+    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x7x7x7x7x7 \
+    --smoothing-sigmas 12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288mm \
   --transform Rigid[ 0.5 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,Regular,0.25 ] \
-  --convergence [ 2025x2025x2025,1e-6,10 ] \
-  --shrink-factors 8x4x2 \
-  --smoothing-sigmas 6.7945744023x3.39728720115x1.69864360058mm \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,43,Regular,0.5 ] \
+    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x7x7x7x7x7 \
+    --smoothing-sigmas 10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202mm \
   --transform Similarity[ 0.25 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,128,Regular,0.5 ] \
-  --convergence [ 2025x2025x750,1e-6,10 ] \
-  --shrink-factors 4x2x1 \
-  --smoothing-sigmas 3.39728720115x1.69864360058x0.849321800288mm \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,85,Regular,0.5 ] \
+    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x7x7x6x5x4 \
+    --smoothing-sigmas 7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
   --transform Affine[ 0.125 ] \
-  --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,256,Regular,0.5 ] \
-  --convergence [ 2025x2025,1e-6,10 ] \
-  --shrink-factors 4x2 \
-  --smoothing-sigmas 3.39728720115x1.69864360058mm
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,256,Regular,0.75 ] \
+    --convergence [ 2025x2025x2025x675x225x75,1e-6,10 ] \
+    --shrink-factors 6x5x4x3x2x1 \
+    --smoothing-sigmas 5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288mm \
 
-#Generate model headmask
-ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
-ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
+ImageMath 3 ${tmpdir}/cropmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelheadmask.mnc
+ImageMath 3 ${tmpdir}/extractmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelbrainmask.mnc
 
-#Initial threshold of greater than 0.5*otsu threshold
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.5*$(mincstats -quiet -floor 1e-6 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
+
+
+ceil=$(mincstats -floor 1.01 -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -quiet -bins 4096 -pctT 95 ${tmpdir}/${n}/t1.mnc)
+floor=$(mincstats -ceil ${ceil} -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -quiet -bins 4096 -pctT 0.05 ${tmpdir}/${n}/t1.mnc)
+
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.005*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.75*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+
+#Always exclude 0 from correction
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${input} ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/headmask.mnc
+
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 
-#Always exclude 0 from correction
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
-#Remove high noise background voxels
-iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
-mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
