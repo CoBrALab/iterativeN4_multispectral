@@ -641,22 +641,18 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
     --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/headmask.mnc ]
 
-#Generate a mask from the model 50% WM/GM probailities
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mnimask.mnc
-iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 3 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
-iMath 3 ${tmpdir}/${n}/mnimask.mnc ME ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
-
-#Generate a hotmask using the existing weight mask
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/hotmask.mnc
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 iMath 3 ${tmpdir}/${n}/mnimask_D.mnc MD ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mnimask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
-#Do a quick kmeans to get gm/wm and make a hard mask for weight
-ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/kmeansmask.mnc
-ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 2 3 1 0
+Atropos -d 3 -x ${tmpdir}/${n}/mnimask_D.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
+  -w BoxPlot -s 1x2 -s 2x3 -s 1x3  --verbose -m [ 0.3,1x1x1 ] -p Socrates[ 0 ]
+
+ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
+ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/3.mnc 3 3 1 0
+ImageMath 3 ${tmpdir}/${n}/2.mnc GetLargestComponent ${tmpdir}/${n}/2.mnc
+ImageMath 3 ${tmpdir}/${n}/3.mnc GetLargestComponent ${tmpdir}/${n}/3.mnc
+
+ImageMath 3 ${tmpdir}/${n}/weight.mnc addtozero ${tmpdir}/${n}/2.mnc ${tmpdir}/${n}/3.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
@@ -720,15 +716,7 @@ iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 3 1 ball 1
 volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
-mincbeast ${N4_VERBOSE:+-verbose} -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
-
-#Generate a mask from the model 50% WM/GM probailities
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${GMPRIOR} -o ${tmpdir}/${n}/gmprob.mnc -n Linear
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${WMPRIOR} -o ${tmpdir}/${n}/wmprob.mnc -n Linear
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>0.5||A[1]>0.5)?1:0' ${tmpdir}/${n}/gmprob.mnc ${tmpdir}/${n}/wmprob.mnc ${tmpdir}/${n}/mnimask.mnc
-iMath 3 ${tmpdir}/${n}/mnimask.mnc MD ${tmpdir}/${n}/mnimask.mnc 3 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/mnimask.mnc FillHoles ${tmpdir}/${n}/mnimask.mnc 2
-iMath 3 ${tmpdir}/${n}/mnimask.mnc ME ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
+mincbeast ${N4_VERBOSE:+-verbose} -sparse -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 #Resample beast mask and MNI mask to native space
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
@@ -739,18 +727,25 @@ ImageMath 3 ${tmpdir}/${n}/bmask.mnc GetLargestComponent ${tmpdir}/${n}/bmask.mn
 iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
+cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
-#Generate a hotmask using the existing weight mask
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/hotmask.mnc
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/kmeansmask.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
-#Do a quick kmeans to get gm/wm and make a hard mask for weight
-ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc Kmeans 2 ${tmpdir}/${n}/kmeansmask.mnc
-ThresholdImage 3 ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc 2 3 1 0
+Atropos -d 3 -x ${tmpdir}/${n}/mask_D.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
+  -w BoxPlot -s 1x2 -s 2x3 -s 1x3  --verbose -m [ 0.2,1x1x1 ] -p Socrates[ 0 ]
+
+ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
+ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/3.mnc 3 3 1 0
+ImageMath 3 ${tmpdir}/${n}/2.mnc GetLargestComponent ${tmpdir}/${n}/2.mnc
+ImageMath 3 ${tmpdir}/${n}/3.mnc GetLargestComponent ${tmpdir}/${n}/3.mnc
+
+ImageMath 3 ${tmpdir}/${n}/weight.mnc addtozero ${tmpdir}/${n}/2.mnc ${tmpdir}/${n}/3.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+
+iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 2 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/mask2.mnc FillHoles ${tmpdir}/${n}/mask2.mnc 2
 
 if [[ -n ${excludemask} ]]; then
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
@@ -796,9 +791,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --smoothing-sigmas 3.39728720115x1.69864360058x0mm \
   --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/$((n - 1))/mask2.mnc ]
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
-mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
-mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
+cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
 
 #Shrink last round's beastmask for normalization
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${tmpdir}/$((n - 1))/beastmask.mnc 3 1 ball 1
