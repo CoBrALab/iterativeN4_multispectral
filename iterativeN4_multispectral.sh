@@ -475,6 +475,8 @@ mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -max -quiet
 ImageMath 3 ${input} RescaleImage ${tmpdir}/input.clamp.mnc 0 65535
 rm -f ${tmpdir}/input.clamp.mnc
 
+minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
+
 #If lesion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
 if [[ -n ${_arg_exclude} ]]; then
   ImageMath 3 ${tmpdir}/exclude.mnc Neg ${_arg_exclude}
@@ -507,6 +509,8 @@ iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
 mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
+
 do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
 
@@ -560,6 +564,7 @@ iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 box 1
 mincdefrag ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.defrag.mnc 1 27
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.defrag.mnc 1 1 box 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
 
@@ -570,6 +575,10 @@ ImageMath 3 ${input} m ${input} ${tmpdir}/headmask.mnc
 ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/headmask.mnc 1 10
 mv -f ${tmpdir}/input.crop.mnc ${input}
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
+minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
+
+mincresample -like ${input} ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/bias_resample.mnc
+mv -f ${tmpdir}/${n}/bias_resample.mnc ${tmpdir}/${n}/bias.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/corrected.mnc -o ${tmpdir}/${n}/corrected.mnc -r ${input}
 ImageMath 3 ${tmpdir}/${n}/corrected.mnc m ${tmpdir}/${n}/corrected.mnc ${tmpdir}/headmask.mnc
@@ -656,12 +665,13 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/weight.mnc 0.1
 
 #Calculate coeffcient of variation between this round bias field and prior round
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
-python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
+python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mnimask.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mnimask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
   rm -rf ${tmpdir}/$((n - 1))
@@ -758,11 +768,12 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/weight.mnc
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
-python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/kmeansmask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
+python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
   rm -rf ${tmpdir}/$((n - 1))
@@ -909,10 +920,11 @@ ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpd
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/class3.mnc
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
 if [[ ${_arg_debug} == "off" ]]; then
@@ -969,11 +981,12 @@ while true; do
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 
   ImageMath 3 ${tmpdir}/${n}/mask2_nooutlier.mnc m ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/hotmask.mnc
+  ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
   do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/class3.mnc
 
   #Compute coeffcient of variation
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/iterative_bias.mnc ${tmpdir}/${n}/iterative_bias.mnc ${tmpdir}/${n}/ratio.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
   python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
   if [[ ${_arg_debug} == "off" ]]; then
