@@ -535,32 +535,31 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
   --use-histogram-matching 1 \
   --initial-moving-transform [ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1 ] \
-  --transform Translation[ 0.5 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,37,Regular,0.25 ] \
-    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-    --shrink-factors 7x7x7x7x7x7 \
-    --smoothing-sigmas 12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288mm \
-  --transform Rigid[ 0.5 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,43,Regular,0.5 ] \
-    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-    --shrink-factors 7x7x7x7x7x7 \
-    --smoothing-sigmas 10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202mm \
-  --transform Similarity[ 0.25 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,85,Regular,0.5 ] \
-    --convergence [ 2025x2025x2025x2025x2025x2025,1e-6,10 ] \
-    --shrink-factors 7x7x7x6x5x4 \
-    --smoothing-sigmas 7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
-  --transform Affine[ 0.125 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,256,Regular,0.75 ] \
-    --convergence [ 2025x2025x2025x675x225x75,1e-6,10 ] \
-    --shrink-factors 6x5x4x3x2x1 \
-    --smoothing-sigmas 5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058x0.849321800288mm \
+  --transform Translation[ 0.1 ] \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,32,None ] \
+    --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x7x7x7x7x7x7x7x7x6x5x4 \
+    --smoothing-sigmas 12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
+  --transform Rigid[ 0.1 ] \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,32,None ] \
+    --convergence [ 2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x7x7x7x7x7x7x7x7x6x5x4 \
+    --smoothing-sigmas 12.7398270043x11.890505204x11.0411834037x10.1918616035x9.34253980317x8.49321800288x7.64389620259x6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.397287201150mm \
+  --transform Similarity[ 0.1 ] \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,32,None ] \
+    --convergence [ 2025x2025x2025x2025,1e-6,10 ] \
+    --shrink-factors 7x6x5x4 \
+    --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
+  --transform Affine[ 0.1 ] \
+    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,32,None ] \
+    --convergence [ 2025x2025x2025x2025x675x225,1e-6,10 ] \
+    --shrink-factors 7x6x5x4x3x2 \
+    --smoothing-sigmas 5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm
 
 ImageMath 3 ${tmpdir}/cropmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelheadmask.mnc
 ImageMath 3 ${tmpdir}/extractmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelbrainmask.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
-
 
 ceil=$(mincstats -floor 1.01 -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -quiet -bins 4096 -pctT 95 ${tmpdir}/${n}/t1.mnc)
 floor=$(mincstats -ceil ${ceil} -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -quiet -bins 4096 -pctT 0.05 ${tmpdir}/${n}/t1.mnc)
