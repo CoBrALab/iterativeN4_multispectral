@@ -977,10 +977,12 @@ if [[ ${_arg_autocrop} == "on" ]]; then
 fi
 
 #Transform all the working files into the original input space
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/finalweight.mnc -r ${originput} -n Linear
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} ${tmpdir}/${n}/weight.mnc ${tmpdir}/finalweight.mnc
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${originput} ${tmpdir}/nonzero.mnc
 
 ImageMath 3 ${tmpdir}/finalweight.mnc m ${tmpdir}/finalweight.mnc ${tmpdir}/nonzero.mnc
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} ${tmpdir}/finalweight.mnc ${tmpdir}/finalweight2.mnc
+mv -f ${tmpdir}/finalweight2.mnc ${tmpdir}/finalweight.mnc
 
 #Create a FOV mask for the original input
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${originput} ${tmpdir}/originitmask.mnc
