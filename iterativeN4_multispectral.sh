@@ -643,7 +643,10 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 iMath 3 ${tmpdir}/${n}/mnimask_D.mnc MD ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
 
-Atropos -d 3 -x ${tmpdir}/${n}/mnimask_D.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mnimask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mnimask_D_nohot.mnc m ${tmpdir}/${n}/mnimask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+
+Atropos -d 3 -x ${tmpdir}/${n}/mnimask_D_nohot.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
   -w BoxPlot -s 1x2 -s 2x3 -s 1x3  --verbose -m [ 0.3,1x1x1 ] -p Socrates[ 0 ]
 
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
@@ -730,7 +733,10 @@ cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
-Atropos -d 3 -x ${tmpdir}/${n}/mask_D.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask_D_nohot.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+
+Atropos -d 3 -x ${tmpdir}/${n}/mask_D_nohot.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
   -w BoxPlot -s 1x2 -s 2x3 -s 1x3  --verbose -m [ 0.2,1x1x1 ] -p Socrates[ 0 ]
 
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
