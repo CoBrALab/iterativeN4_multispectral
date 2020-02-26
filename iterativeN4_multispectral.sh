@@ -7,7 +7,6 @@
 # ARG_OPTIONAL_SINGLE([logfile],[l],[Path to file to log all output])
 # ARG_OPTIONAL_BOOLEAN([standalone],[s],[Script is run standalone so save all outputs])
 # ARG_OPTIONAL_BOOLEAN([autocrop],[a],[Crop the final output to 10 mm around the skull])
-# ARG_OPTIONAL_BOOLEAN([denoise],[d],[Denoise the final output files])
 # ARG_OPTIONAL_SINGLE([max-iterations],[],[Maximum number of iterations to run],[10])
 # ARG_OPTIONAL_SINGLE([convergence-threshold],[],[Coeffcient of variation limit between two bias field estimates],[0.01])
 # ARG_OPTIONAL_SINGLE([classification-prior-weight],[],[How much weight is given to prior classification proabilities during iteration],[0.25])
@@ -40,13 +39,13 @@ die()
 
 evaluate_strictness()
 {
-  [[ "$2" =~ ^-(-(exclude|config|logfile|standalone|autocrop|denoise|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsadvh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
+  [[ "$2" =~ ^-(-(exclude|config|logfile|standalone|autocrop|max-iterations|convergence-threshold|classification-prior-weight|debug|verbose|input|output|help)$|[eclsavh]) ]] && die "You have passed '$2' as a value of argument '$1', which makes it look like that you have omitted the actual value, since '$2' is an option accepted by this script. This is considered a fatal error."
 }
 
 
 begins_with_short_option()
 {
-  local first_option all_short_options='eclsadvh'
+  local first_option all_short_options='eclsavh'
   first_option="${1:0:1}"
   test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -61,7 +60,6 @@ _arg_config=
 _arg_logfile=
 _arg_standalone="off"
 _arg_autocrop="off"
-_arg_denoise="off"
 _arg_max_iterations="10"
 _arg_convergence_threshold="0.01"
 _arg_classification_prior_weight="0.25"
@@ -72,7 +70,7 @@ _arg_verbose=0
 print_help()
 {
   printf '%s\n' "iterativeN4_multispectral.sh is script which performs iterative inhomogeneity (bias field) correction and classification on T1w (and optionally T2w/PDw) MRI scans"
-  printf 'Usage: %s [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [-d|--(no-)denoise] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
+  printf 'Usage: %s [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>\n' "$0"
   printf '\t%s\n' "<input>: T1w scan to be corrected"
   printf '\t%s\n' "<output>: Output filename for corrected T1w (also used as basename for other outputs)"
   printf '\t%s\n' "-e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)"
@@ -80,7 +78,6 @@ print_help()
   printf '\t%s\n' "-l, --logfile: Path to file to log all output (no default)"
   printf '\t%s\n' "-s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)"
   printf '\t%s\n' "-a, --autocrop, --no-autocrop: Crop the final output to 10 mm around the skull (off by default)"
-  printf '\t%s\n' "-d, --denoise, --no-denoise: Denoise the final output files (off by default)"
   printf '\t%s\n' "--max-iterations: Maximum number of iterations to run (default: '10')"
   printf '\t%s\n' "--convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.01')"
   printf '\t%s\n' "--classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')"
@@ -161,18 +158,6 @@ parse_commandline()
         if test -n "$_next" -a "$_next" != "$_key"
         then
           { begins_with_short_option "$_next" && shift && set -- "-a" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
-        fi
-        ;;
-      -d|--no-denoise|--denoise)
-        _arg_denoise="on"
-        test "${1:0:5}" = "--no-" && _arg_denoise="off"
-        ;;
-      -d*)
-        _arg_denoise="on"
-        _next="${_key##-d}"
-        if test -n "$_next" -a "$_next" != "$_key"
-        then
-          { begins_with_short_option "$_next" && shift && set -- "-d" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
         fi
         ;;
       --max-iterations)
@@ -1042,13 +1027,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?cla
   ${n4corrected} $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
   mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 
-#Denoise output if requested
-if [[ ${_arg_denoise} == "on" ]]; then
-  minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/corrected.mnc ${tmpdir}/corrected.denoise.mnc
-  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/corrected.denoise.mnc ${output}
-else
-  cp -f ${tmpdir}/corrected.mnc ${output}
-fi
+cp -f ${tmpdir}/corrected.mnc ${output}
 
 #Output final classification files if standalone
 if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
@@ -1060,6 +1039,9 @@ if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
   ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc ${tmpdir}/output.extracted.crop.mnc ${tmpdir}/finalmask.mnc 1 10
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/output.extracted.crop.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc
+
+  DenoiseImage -d 3 -n Gaussian ${N4_VERBOSE:+--verbose} -i ${tmpdir}/corrected.mnc -o ${tmpdir}/corrected.denoise.mnc
+  mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/corrected.denoise.mnc $(dirname $output)/$(basename ${output} .mnc).denoise.mnc
 fi
 
 if [[ ${_arg_debug} == "off" ]]; then
