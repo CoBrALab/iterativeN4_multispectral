@@ -411,17 +411,18 @@ function do_N4_correct() {
     ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
     ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
   else
-  #Generate a mask to use for inside vs outside brain rescale
-  iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
-  #Correct original input brain
-  ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
-  #Normalize and rescale intensity
-  n4brainmean=$(mincstats -quiet -median -mask ${n4meanmask} -mask_range 1e-9,inf ${n4corrected})
-  n4nonbrainmean=$(mincstats -quiet -floor $(mincstats -quiet -biModalT -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected}) \
-    -median -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected})
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?clamp(32767*A[0]/${n4brainmean},0,65535):clamp(32767*A[0]/${n4nonbrainmean},0,65535)" \
-    ${n4corrected} $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
-fi
+    #Generate a mask to use for inside vs outside brain rescale
+    iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 4 1 ball 1
+    #Correct original input brain
+    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
+    #Normalize and rescale intensity
+    n4brainmean=$(mincstats -quiet -median -mask ${n4meanmask} -mask_range 1e-9,inf ${n4corrected})
+    n4nonbrainmean=$(mincstats -quiet -floor $(mincstats -quiet -biModalT -floor 1e-6 -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected}) \
+      -median -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected})
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?clamp(32767*A[0]/${n4brainmean},0,65535):clamp(32767*A[0]/${n4nonbrainmean},0,65535)" \
+      ${n4corrected} $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+  fi
+
   mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 }
 
