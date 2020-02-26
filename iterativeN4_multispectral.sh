@@ -453,6 +453,9 @@ mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max
 mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
 originput=${tmpdir}/originput.mnc
 
+#Calculate scaling for final correction
+final_n4_shrink=$(python -c "print(int(round(2/min([abs(x) for x in [float(x) for x in \"$(PrintHeader ${originput} 1)\".split(\"x\")]]))))")
+
 #Isotropize, and normalize intensity range
 isostep=1
 ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
@@ -984,7 +987,7 @@ n4brainmask=${tmpdir}/finalmask.mnc
 n4weight=${tmpdir}/finalweight.mnc
 n4corrected=${tmpdir}/corrected.mnc
 n4bias=${tmpdir}/bias.mnc
-n4shrink=2
+n4shrink=${final_n4_shrink}
 n4meanmask=${tmpdir}/finalclass3.mnc
 n4fwhm=0.05
 
