@@ -1043,8 +1043,8 @@ if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
   ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc ${tmpdir}/output.extracted.crop.mnc ${tmpdir}/finalmask.mnc 1 10
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/output.extracted.crop.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc
-
-  DenoiseImage -d 3 -n Gaussian ${N4_VERBOSE:+--verbose} -i ${tmpdir}/corrected.mnc -o ${tmpdir}/corrected.denoise.mnc
+ 
+  minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/corrected.mnc ${tmpdir}/corrected.denoise.mnc
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/corrected.denoise.mnc $(dirname $output)/$(basename ${output} .mnc).denoise.mnc
 fi
 
