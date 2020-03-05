@@ -681,11 +681,18 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 iMath 3 ${tmpdir}/${n}/mnimask_D.mnc MD ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
 
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mnimask_D.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/mnimask_D_nohot.mnc m ${tmpdir}/${n}/mnimask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+#Resample MNI Priors to Native space for classification
+antsApplyTransforms -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${GMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
 
-Atropos -d 3 -x ${tmpdir}/${n}/mnimask_D_nohot.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
-  -w BoxPlot -s 1x2 -s 2x3 -s 1x3  --verbose -m [ 0.3,1x1x1 ] -p Socrates[ 0 ]
+if [[ -n ${excludemask} ]]; then
+  ImageMath 3 ${tmpdir}/${n}/mnimask_D.mnc m ${tmpdir}/${n}/mnimask_D.mnc ${excludemask}
+fi
+
+Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mnimask_D.mnc -c [ 5,0.001 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 -s 1x3 \
+  -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight} ] -k HistogramParzenWindows -m [ 0.1,1x1x1 ] \
+  -o ${tmpdir}/${n}/classify.mnc -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
 
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/3.mnc 3 3 1 0
@@ -771,11 +778,18 @@ cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/mask_D_nohot.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+#Resample MNI Priors to Native space for classification
+antsApplyTransforms -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${GMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
+antsApplyTransforms -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
 
-Atropos -d 3 -x ${tmpdir}/${n}/mask_D_nohot.mnc -a ${tmpdir}/${n}/t1.mnc -i KMeans[3] -k HistogramParzenWindows -o ${tmpdir}/${n}/classify.mnc \
-  -w BoxPlot -s 1x2 -s 2x3 -s 1x3  --verbose -m [ 0.2,1x1x1 ] -p Socrates[ 0 ]
+if [[ -n ${excludemask} ]]; then
+  ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
+fi
+
+Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.001 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 -s 1x3 \
+  -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight} ] -k HistogramParzenWindows -m [ 0.1,1x1x1 ] \
+  -o ${tmpdir}/${n}/classify.mnc -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
 
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/3.mnc 3 3 1 0
@@ -884,10 +898,9 @@ if [[ -n ${excludemask} ]]; then
 fi
 
 #Do an initial classification using the MNI priors
-Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 25,0.001 ] -a ${tmpdir}/${n}/t1.mnc \
+Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 25,0.001 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 -s 1x3 \
   -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight} ] -k HistogramParzenWindows -m [ 0.1,1x1x1 ] \
-  -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Aristotle[ 0 ] --winsorize-outliers BoxPlot \
-  -l [ 0.69314718055994530942,1 ]
+  -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
 
 #Convert classification to the mask
 classify_to_mask
@@ -952,10 +965,9 @@ while true; do
   fi
 
   #Do an initial classification using the last round posteriors, remove outliers
-  Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.001 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
+  Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.001 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 -s 1x3 \
     -i PriorProbabilityImages[ 3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${_arg_classification_prior_weight} ] -k HistogramParzenWindows -m [ 0.1,1x1x1 ] \
-    -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Aristotle[ 1 ] --winsorize-outliers BoxPlot \
-    -l [ 0.69314718055994530942,1 ]
+    -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Socrates[ 1 ] --winsorize-outliers BoxPlot
 
   classify_to_mask
   ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/$((n - 1))/mask2.mnc
