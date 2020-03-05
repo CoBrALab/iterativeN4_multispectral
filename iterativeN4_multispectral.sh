@@ -551,7 +551,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
 
 if [[ ${_arg_config} == "auto" ]]; then
