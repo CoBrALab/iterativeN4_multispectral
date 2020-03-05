@@ -316,7 +316,7 @@ RESAMPLEMODEL="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_i
 RESAMPLEMODELBRAINMASK="${QUARANTINE_PATH}/resources/mni_icbm152_nlin_sym_09c_minc2/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"
 
 # Check config files, eventually argbash will do this
-if [[ -n ${_arg_config} ]]; then
+if [[ -n ${_arg_config} && ${_arg_config} != "auto" ]]; then
   if [[ -r ${_arg_config} ]]; then
     source ${_arg_config}
   else
@@ -447,6 +447,59 @@ function classify_to_mask() {
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
 
+function test_templates() {
+
+  mkdir -p ${tmpdir}/test_templates
+
+  for configfile in $(dirname "$(readlink -f "$0")")/configs/*cfg; do
+
+    source ${configfile}
+
+    antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
+      --output [ ${tmpdir}/test_templates/$(basename ${configfile} .cfg),${tmpdir}/test_templates/$(basename ${configfile} .cfg).mnc ] \
+      --use-histogram-matching 1 \
+      --initial-moving-transform [ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1 ] \
+      --transform Translation[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,37,None ] \
+        --convergence [ 2025x2025x2025x2025x675,1e-6,10 ] \
+        --shrink-factors 7x7x6x5x4 \
+        --smoothing-sigmas 6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
+      --masks [ NOMASK,NOMASK ] \
+      --transform Rigid[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,51,None ] \
+        --convergence [ 2025x675x225,1e-6,10 ] \
+        --shrink-factors 5x4x3 \
+        -smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086mm \
+      --masks [ NOMASK,NOMASK ] \
+      --transform Similarity[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+        --convergence [ 675x225x75,1e-6,10 ] \
+        --shrink-factors 4x3x2 \
+        --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
+      --masks [ NOMASK,NOMASK ] \
+      --transform Similarity[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+        --convergence [ 675x225x75,1e-6,10 ] \
+        --shrink-factors 4x3x2 \
+        --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
+      --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
+      --transform Affine[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+        --convergence [ 675x225x75x25x25,1e-6,10 ] \
+        --shrink-factors 4x3x2x1x1 \
+        --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
+        --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
+
+    echo ${configfile},$(MeasureImageSimilarity -d 3 -m CC[${REGISTRATIONMODEL},${tmpdir}/test_templates/$(basename ${configfile} .cfg).mnc,1,4] \
+      -x ${REGISTRATIONBRAINMASK}) >> ${tmpdir}/test_templates/results.csv
+  done
+
+  unset MNI_XFM
+  source $(sort -k2 -g -t, ${tmpdir}/test_templates/results.csv | cut -d"," -f 1 | head -1)
+  if [[ ${_arg_debug} == "off" ]]; then
+    rm -rf ${tmpdir}/test_templates
+  fi
+}
 ##########START OF SCRIPT#############
 #Forceably convert to MINC2, and clamp range to avoid negative numbers
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
@@ -503,6 +556,10 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonz
 
 do_N4_correct ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
+
+if [[ ${_arg_config} == "auto" ]]; then
+  test_templates
+fi
 
 #Generate model headmask
 ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
@@ -694,7 +751,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/$((n - 1))/weight.mnc ]
 
 #Make MNI-space copy of brain for BeAST
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 #BSpline[ 5 ] does weird things to intensity, clip back to positive range
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
@@ -710,7 +767,7 @@ volume_pol --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMP
 mincbeast ${N4_VERBOSE:+-verbose} -sparse -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 #Resample beast mask and MNI mask to native space
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] ${MNI_XFM:+-t [${MNI_XFM},1]} -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
 
 #BeAST Failure mode of a chunk of almost unattached voxels
 iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
