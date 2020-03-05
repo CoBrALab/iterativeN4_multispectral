@@ -466,7 +466,7 @@ function test_templates() {
         --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,51,None ] \
         --convergence [ 2025x675x225,1e-6,10 ] \
         --shrink-factors 5x4x3 \
-        -smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086mm \
+        --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086mm \
       --masks [ NOMASK,NOMASK ] \
       --transform Similarity[ 0.1 ] \
         --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
