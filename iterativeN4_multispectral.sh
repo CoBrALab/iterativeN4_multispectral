@@ -376,7 +376,6 @@ function do_N4_correct() {
   local n4bias=$6
   local n4shrink=$7
   local n4meanmask=$8
-  local n4fwhm="${9:-0.05}"
 
   local min
   local max
@@ -397,21 +396,29 @@ function do_N4_correct() {
 
   #Estimate bias field
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-    -b [ 200 ] -c [ 300x300x300x300,1e-6 ] --histogram-sharpening [ ${n4fwhm},0.01,${histbins} ] \
+    -b [ 200 ] -c [ 50x50x50x50,1e-6 ] --histogram-sharpening [ 0.15,0.01,${histbins} ] \
     -i ${n4input} \
-    -o [ ${n4corrected},${n4bias} ] -r 0
+    -o [ ${n4corrected},${tmpdir}/${n}/bias1.mnc ] -r 0
+
+  minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${n4corrected} ${tmpdir}/${n}/N4_denoise.mnc
+
+  #Estimate bias field
+  N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
+    -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ 0.05,0.01,${histbins} ] \
+    -i ${tmpdir}/${n}/N4_denoise.mnc \
+    -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
+
+  ImageMath 3 ${n4bias} m ${tmpdir}/${n}/bias1.mnc ${tmpdir}/${n}/bias2.mnc
 
   #Normalize to mean 1
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
+  ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
   if ((n == 0)); then
     #First round we don't do any fancy rescaling
-    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
     ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
   else
     #Generate a mask to use for inside vs outside brain rescale
     iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 4 1 ball 1
-    #Correct original input brain
-    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
     #Normalize and rescale intensity
     n4brainmean=$(mincstats -quiet -median -mask ${n4meanmask} -mask_range 1e-9,inf ${n4corrected})
     n4nonbrainmean=$(mincstats -quiet -floor $(mincstats -quiet -biModalT -floor 1e-6 -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected}) \
@@ -551,7 +558,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
 
 if [[ ${_arg_config} == "auto" ]]; then
@@ -633,7 +640,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc 0.1
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc
 
 #Resample headmask into subject space, zero background and recrop
 ImageMath 3 ${input} PadImage ${input} 50
@@ -719,7 +726,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/3.mnc 0.1
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/3.mnc
 
 #Calculate coeffcient of variation between this round bias field and prior round
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
@@ -1051,7 +1058,6 @@ n4corrected=${tmpdir}/corrected.mnc
 n4bias=${tmpdir}/bias.mnc
 n4shrink=${final_n4_shrink}
 n4meanmask=${tmpdir}/finalclass3.mnc
-n4fwhm=0.05
 
 #Calculate bins for N4 with Freedman-Diaconis’s Rule
 min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
@@ -1063,9 +1069,19 @@ histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${p
 
 #Estimate bias field
 N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-  -b [ 200 ] -c [ 1000x1000x1000x1000,1e-6 ] --histogram-sharpening [ ${n4fwhm},0.01,${histbins} ] \
+  -b [ 200 ] -c [ 50x50x50x50,1e-6 ] --histogram-sharpening [ 0.15,0.01,${histbins} ] \
   -i ${n4input} \
-  -o [ ${n4corrected},${n4bias} ] -r 0
+  -o [ ${n4corrected},${tmpdir}/${n}/bias1.mnc ] -r 0
+
+minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${n4corrected} ${tmpdir}/N4_denoise.mnc
+
+#Estimate bias field
+N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
+  -b [ 200 ] -c [ 300x300x300x300,1e-6 ] --histogram-sharpening [ 0.05,0.01,${histbins} ] \
+  -i ${tmpdir}/N4_denoise.mnc \
+  -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
+
+ImageMath 3 ${n4bias} m ${tmpdir}/${n}/bias1.mnc ${tmpdir}/${n}/bias2.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o ${tmpdir}/finalmask.mnc -r ${n4corrected} -n GenericLabel
 
