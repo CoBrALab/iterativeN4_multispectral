@@ -561,6 +561,8 @@ fi
 #Generate model headmask
 ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
 ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
+iMath 3 ${tmpdir}/modelheadmask.mnc MC ${tmpdir}/modelheadmask.mnc 6 1 ball 1
+ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
 ImageMath 3 ${tmpdir}/cropmodel.mnc PadImage ${REGISTRATIONMODEL} 50
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc \
   -o ${tmpdir}/modelheadmask.mnc -r ${tmpdir}/cropmodel.mnc -n GenericLabel
