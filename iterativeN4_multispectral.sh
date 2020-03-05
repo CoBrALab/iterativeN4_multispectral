@@ -341,9 +341,6 @@ originput=${_arg_input}
 #Internal resampled input used for processing
 input=${tmpdir}/t1.mnc
 
-#Quick awk math function
-calc() { awk "BEGIN { print "$*" }"; }
-
 #Function for generating an outlier mask based on >3xIQR
 #Mostly for excluding blood vessels when T1 was tuned improperly
 function outlier_mask() {
