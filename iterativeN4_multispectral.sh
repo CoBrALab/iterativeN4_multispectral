@@ -453,6 +453,56 @@ function classify_to_mask() {
   ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
 
+function make_qc() {
+
+  mkdir -p ${tmpdir}/qc
+
+  antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
+    -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
+  antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
+    -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n Linear
+
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression "1" ${RESAMPLEMODELBRAINMASK} ${tmpdir}/qc/bounding.mnc
+
+  #Trasverse
+  create_verify_image -range_floor 0 ${tmpdir}/qc/t.rgb \
+    -width 1920 -autocols 9 -autocol_planes t \
+    -bounding_volume ${tmpdir}/qc/bounding.mnc \
+    -row ${tmpdir}/qc/corrected.mnc color:gray \
+    volume_overlay:${tmpdir}/qc/classify.mnc:0.4
+
+  create_verify_image -range_floor 0 ${tmpdir}/qc/t2.rgb \
+    -width 1920 -autocols 9 -autocol_planes t \
+    -bounding_volume ${tmpdir}/qc/bounding.mnc \
+    -row ${tmpdir}/qc/corrected.mnc color:spect
+
+  #Saggital
+  create_verify_image -range_floor 0 ${tmpdir}/qc/s.rgb \
+    -width 1920 -autocols 9 -autocol_planes s \
+    -bounding_volume ${tmpdir}/qc/bounding.mnc \
+    -row ${tmpdir}/qc/corrected.mnc color:gray \
+    volume_overlay:${tmpdir}/qc/classify.mnc:0.4
+
+  create_verify_image -range_floor 0 ${tmpdir}/qc/s2.rgb \
+    -width 1920 -autocols 9 -autocol_planes s \
+    -bounding_volume ${tmpdir}/qc/bounding.mnc \
+    -row ${tmpdir}/qc/corrected.mnc color:spect
+
+  #Coronal
+  create_verify_image -range_floor 0 ${tmpdir}/qc/c.rgb \
+    -width 1920 -autocols 9 -autocol_planes c \
+    -bounding_volume ${tmpdir}/qc/bounding.mnc \
+    -row ${tmpdir}/qc/corrected.mnc color:gray \
+    volume_overlay:${tmpdir}/qc/classify.mnc:0.4
+
+  create_verify_image -range_floor 0 ${tmpdir}/qc/c2.rgb \
+    -width 1920 -autocols 9 -autocol_planes c \
+    -bounding_volume ${tmpdir}/qc/bounding.mnc \
+    -row ${tmpdir}/qc/corrected.mnc color:spect
+
+  convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%"  -append -trim ${tmpdir}/qc/*.rgb $(dirname ${output})/$(basename ${output} .mnc).jpg
+
+}
 function test_templates() {
 
   mkdir -p ${tmpdir}/test_templates
@@ -879,6 +929,9 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0mm \
   --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/${n}/mask.mnc ]
 
+#Same Registration to MNI Space for QC
+cp -f ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine.xfm
+
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms -i ${WMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
 antsApplyTransforms -i ${GMPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc ${N4_VERBOSE:+--verbose} -d 3 -n Linear
@@ -1114,6 +1167,7 @@ cp -f ${tmpdir}/corrected.mnc ${output}
 
 #Output final classification files if standalone
 if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
+  make_qc
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalbmask.mnc $(dirname ${output})/$(basename ${output} .mnc).beastmask.mnc
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalmnimask.mnc $(dirname ${output})/$(basename ${output} .mnc).mnimask.mnc
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -byte -unsigned ${tmpdir}/finalclassify.mnc $(dirname $output)/$(basename ${output} .mnc).classify.mnc
