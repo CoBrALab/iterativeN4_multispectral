@@ -418,7 +418,7 @@ function do_N4_correct() {
     ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
   else
     #Generate a mask to use for inside vs outside brain rescale
-    iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 4 1 ball 1
+    iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 1 1 ball 1
     #Normalize and rescale intensity
     n4brainmean=$(mincstats -quiet -median -mask ${n4meanmask} -mask_range 1e-9,inf ${n4corrected})
     n4nonbrainmean=$(mincstats -quiet -floor $(mincstats -quiet -biModalT -floor 1e-6 -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected}) \
@@ -438,6 +438,8 @@ function classify_to_mask() {
 
   ImageMath 3 ${tmpdir}/${n}/gm.mnc GetLargestComponent ${tmpdir}/${n}/gm.mnc
   ImageMath 3 ${tmpdir}/${n}/wm.mnc GetLargestComponent ${tmpdir}/${n}/wm.mnc
+
+  ImageMath 3 ${tmpdir}/${n}/gm.mnc FillHoles ${tmpdir}/${n}/gm.mnc 2
 
   ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/gm.mnc ${tmpdir}/${n}/wm.mnc
 
@@ -808,7 +810,7 @@ iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 
-iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 2 1 ball 1
+iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 4 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mask2.mnc FillHoles ${tmpdir}/${n}/mask2.mnc 2
 
 if [[ -n ${excludemask} ]]; then
@@ -885,7 +887,7 @@ antsApplyTransforms -i ${CSFPRIOR} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 
 #Masks
 antsApplyTransforms -i ${REGISTRATIONBRAINMASK} -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc ${N4_VERBOSE:+--verbose} -d 3 -n GenericLabel
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>=0.5||A[1]>=0.5)?1:0' ${tmpdir}/${n}/SegmentationPrior3.mnc ${tmpdir}/${n}/SegmentationPrior2.mnc ${tmpdir}/${n}/mniprobmask.mnc
-iMath 3 ${tmpdir}/${n}/mniprobmask.mnc MD ${tmpdir}/${n}/mniprobmask.mnc 3 1 ball 1
+iMath 3 ${tmpdir}/${n}/mniprobmask.mnc MD ${tmpdir}/${n}/mniprobmask.mnc 2 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mniprobmask.mnc FillHoles ${tmpdir}/${n}/mniprobmask.mnc 2
 iMath 3 ${tmpdir}/${n}/mniprobmask.mnc ME ${tmpdir}/${n}/mniprobmask.mnc 1 1 ball 1
 
@@ -894,7 +896,7 @@ cp -f ${tmpdir}/${n}/mniprobmask.mnc ${tmpdir}/mniprobmask.mnc
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
-mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/mask2.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/mask2.mnc
 mv -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/mask.mnc
 
 #Expand the mask a bit
@@ -1088,7 +1090,7 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o
 #Normalize to mean 1
 ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
 #Generate a mask to use for inside vs outside brain rescale
-iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 2 1 ball 1
+iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 1 1 ball 1
 #Correct original input brain
 ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
 
@@ -1120,7 +1122,7 @@ if [[ ${_arg_standalone} == "on" || ${_arg_debug} == "on" ]]; then
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned -expression 'A[0]*A[1]' ${output} ${tmpdir}/finalmask.mnc ${tmpdir}/output.extracted.mnc
   ExtractRegionFromImageByMask 3 ${tmpdir}/output.extracted.mnc ${tmpdir}/output.extracted.crop.mnc ${tmpdir}/finalmask.mnc 1 10
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/output.extracted.crop.mnc $(dirname $output)/$(basename ${output} .mnc).extracted.mnc
- 
+
   minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/corrected.mnc ${tmpdir}/corrected.denoise.mnc
   mincreshape -quiet ${N4_VERBOSE:+-verbose} -clobber -short -unsigned ${tmpdir}/corrected.denoise.mnc $(dirname $output)/$(basename ${output} .mnc).denoise.mnc
 fi
