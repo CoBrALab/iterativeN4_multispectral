@@ -551,8 +551,14 @@ function test_templates() {
       -x ${REGISTRATIONBRAINMASK}) >> ${tmpdir}/test_templates/results.csv
   done
 
+  #Prep and load winner template
   unset MNI_XFM
+  echo "Choosing template $(sort -k2 -g -t, ${tmpdir}/test_templates/results.csv | cut -d"," -f 1 | head -1)"
   source $(sort -k2 -g -t, ${tmpdir}/test_templates/results.csv | cut -d"," -f 1 | head -1)
+
+  #Store template registration for later use
+  cp -f ${tmpdir}/test_templates/$(basename $(sort -k2 -g -t, ${tmpdir}/test_templates/results.csv | cut -d"," -f 1 | head -1) .cfg)0_GenericAffine.xfm ${tmpdir}/template_bootstrap.xfm
+
   if [[ ${_arg_debug} == "off" ]]; then
     rm -rf ${tmpdir}/test_templates
   fi
@@ -635,30 +641,47 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${REGISTRATIONBRAINMASK} \
   -o ${tmpdir}/modelbrainmask.mnc -r ${tmpdir}/cropmodel.mnc -n GenericLabel
 
 #First try registration to MNI space to get headmask
-antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
-  --output [ ${tmpdir}/${n}/mni ] \
-  --use-histogram-matching 1 \
-  --initial-moving-transform [ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1 ] \
-  --transform Translation[ 0.1 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,37,None ] \
-    --convergence [ 2025x2025x2025x2025x675,1e-6,10 ] \
-    --shrink-factors 7x7x6x5x4 \
-    --smoothing-sigmas 6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
-  --transform Rigid[ 0.1 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,51,None ] \
-    --convergence [ 2025x675x225,1e-6,10 ] \
-    --shrink-factors 5x4x3 \
-    --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086mm \
-  --transform Similarity[ 0.1 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
-    --convergence [ 675x225x75,1e-6,10 ] \
-    --shrink-factors 4x3x2 \
-    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
-  --transform Affine[ 0.1 ] \
-    --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
-    --convergence [ 675x225x75,1e-6,10 ] \
-    --shrink-factors 4x3x2 \
-    --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm
+if [[ -s ${tmpdir}/template_bootstrap.xfm ]]; then
+  antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
+    --output [ ${tmpdir}/${n}/mni ] \
+    --use-histogram-matching 1 \
+    --initial-moving-transform ${tmpdir}/template_bootstrap.xfm \
+    --transform Similarity[ 0.1 ] \
+      --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
+      --convergence [ 675x225x75,1e-6,10 ] \
+      --shrink-factors 4x3x2 \
+      --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
+    --transform Affine[ 0.1 ] \
+      --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
+      --convergence [ 675x225x75,1e-6,10 ] \
+      --shrink-factors 4x3x2 \
+      --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm
+else
+  antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
+    --output [ ${tmpdir}/${n}/mni ] \
+    --use-histogram-matching 1 \
+    --initial-moving-transform [ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1 ] \
+    --transform Translation[ 0.1 ] \
+      --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,37,None ] \
+      --convergence [ 2025x2025x2025x2025x675,1e-6,10 ] \
+      --shrink-factors 7x7x6x5x4 \
+      --smoothing-sigmas 6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
+    --transform Rigid[ 0.1 ] \
+      --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,51,None ] \
+      --convergence [ 2025x675x225,1e-6,10 ] \
+      --shrink-factors 5x4x3 \
+      --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086mm \
+    --transform Similarity[ 0.1 ] \
+      --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
+      --convergence [ 675x225x75,1e-6,10 ] \
+      --shrink-factors 4x3x2 \
+      --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
+    --transform Affine[ 0.1 ] \
+      --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
+      --convergence [ 675x225x75,1e-6,10 ] \
+      --shrink-factors 4x3x2 \
+      --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm
+  fi
 
 ImageMath 3 ${tmpdir}/cropmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelheadmask.mnc
 ImageMath 3 ${tmpdir}/extractmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelbrainmask.mnc
@@ -721,10 +744,16 @@ mkdir -p ${tmpdir}/${n}
 minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
 
 #First try registration to MNI space, multistep
+if [[ -s ${tmpdir}/template_bootstrap.xfm ]]; then
+  reg_initalization=${tmpdir}/template_bootstrap.xfm
+else
+  reg_initalization=${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm
+fi
+
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --output [ ${tmpdir}/${n}/mni ] \
   --use-histogram-matching 1 \
-  --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
+  --initial-moving-transform ${reg_initalization} \
   --transform Similarity[ 0.1 ] \
     --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
     --convergence [ 675x225x75,1e-6,10 ] \
@@ -737,6 +766,8 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --shrink-factors 4x3x2x1x1 \
     --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0.849321800288x0mm \
     --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/headmask.mnc ]
+
+unset reg_initalization
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 iMath 3 ${tmpdir}/${n}/mnimask_D.mnc MD ${tmpdir}/${n}/mnimask.mnc 1 1 ball 1
