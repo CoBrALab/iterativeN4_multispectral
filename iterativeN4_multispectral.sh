@@ -565,7 +565,10 @@ function test_templates() {
 #Forceably convert to MINC2, and clamp range to avoid negative numbers
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/originput.mnc) ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
-mv -f ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.mnc
+ImageMath 3 ${tmpdir}/originput.clamp.mnc RescaleImage ${tmpdir}/originput.clamp.mnc 0 65535
+mincresample -like ${tmpdir}/originput.mnc -keep -unsigned -short ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.clamp.resample.mnc
+mv -f ${tmpdir}/originput.clamp.resample.mnc ${tmpdir}/originput.mnc
+rm -f ${tmpdir}/originput.clamp.mnc
 originput=${tmpdir}/originput.mnc
 
 #Calculate scaling for final correction
