@@ -462,7 +462,8 @@ function make_qc() {
   antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
     -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n Linear
 
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression "1" ${RESAMPLEMODELBRAINMASK} ${tmpdir}/qc/bounding.mnc
+  mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} $(mincbbox -mincresample ${tmpdir}/qc/classify.mnc) ${tmpdir}/qc/classify.mnc ${tmpdir}/qc/label-crop.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression '1' ${tmpdir}/qc/label-crop.mnc ${tmpdir}/qc/bounding.mnc
 
   #Trasverse
   create_verify_image -range_floor 0 ${tmpdir}/qc/t.rgb \
