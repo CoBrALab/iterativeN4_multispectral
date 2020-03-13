@@ -375,7 +375,7 @@ function do_N4_correct() {
   local n4corrected=$5
   local n4bias=$6
   local n4shrink=$7
-  local n4meanmask=$8
+  local n4classifymask=$8
 
   local min
   local max
@@ -383,8 +383,9 @@ function do_N4_correct() {
   local pct75
   local npoints
   local histbins
-  local n4brainmean
-  local n4nonbrainmean
+  local histbins2
+  local pctTlow
+  local pctThigh
 
   #Calculate bins for N4 with Freedman-Diaconis’s Rule
   min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
@@ -393,6 +394,7 @@ function do_N4_correct() {
   pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(${n4shrink}**3))**(-1.0/3.0)) ))")
+  histbins2=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
   #Estimate bias field
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
@@ -414,19 +416,15 @@ function do_N4_correct() {
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
   ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
   if ((n == 0)); then
-    #First round we don't do any fancy rescaling
-    ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc RescaleImage ${n4corrected} 0 65535
+    pctThigh=65535
+    pctTlow=0
   else
-    #Generate a mask to use for inside vs outside brain rescale
-    iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 1 1 ball 1
-    #Normalize and rescale intensity
-    n4brainmean=$(mincstats -quiet -median -mask ${n4meanmask} -mask_range 1e-9,inf ${n4corrected})
-    n4nonbrainmean=$(mincstats -quiet -floor $(mincstats -quiet -biModalT -floor 1e-6 -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected}) \
-      -median -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected})
-    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?clamp(32767*A[0]/${n4brainmean},0,65535):clamp(32767*A[0]/${n4nonbrainmean},0,65535)" \
-      ${n4corrected} $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+    pctThigh=$(mincstats -quiet -mask ${n4classifymask} -mask_binvalue 3 -pctT 99.99 -bins ${histbins2} ${n4corrected})
+    pctTlow=$(mincstats -quiet -mask ${n4classifymask} -mask_binvalue 1 -pctT 1 -bins ${histbins2} ${n4corrected})
   fi
 
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/${pctThigh}*65535,0,65535)" \
+    ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
   mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 }
 
@@ -810,7 +808,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/3.mnc
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/classify.mnc
 
 #Calculate coeffcient of variation between this round bias field and prior round
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
@@ -910,7 +908,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/3.mnc
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/classify.mnc
 
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
@@ -1033,7 +1031,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/class3.mnc
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/classify.mnc
 
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
@@ -1097,7 +1095,7 @@ while true; do
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
   ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
 
-  do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/class3.mnc
+  do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/classify.mnc
 
   #Compute coeffcient of variation
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
@@ -1144,7 +1142,7 @@ n4weight=${tmpdir}/finalweight.mnc
 n4corrected=${tmpdir}/corrected.mnc
 n4bias=${tmpdir}/bias.mnc
 n4shrink=${final_n4_shrink}
-n4meanmask=${tmpdir}/finalclass3.mnc
+n4classifymask=${tmpdir}/finalclassify.mnc
 
 #Calculate bins for N4 with Freedman-Diaconis’s Rule
 min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
@@ -1153,6 +1151,7 @@ npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4inp
 pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
 pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
 histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints} / (${n4shrink}**3) )**(-1.0/3.0)) ))")
+histbins2=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
 #Estimate bias field
 N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
@@ -1174,8 +1173,6 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o
 
 #Normalize to mean 1
 ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
-#Generate a mask to use for inside vs outside brain rescale
-iMath 3 $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc MD ${n4brainmask} 1 1 ball 1
 #Correct original input brain
 ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
 
@@ -1187,13 +1184,12 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/class3.mnc -o ${tmpdir}/finalclass3.mnc -r ${n4corrected} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/weight.mnc -o ${tmpdir}/finalweight.mnc -r ${n4corrected} -n Linear
 
-#Normalize and rescale intensity
-n4brainmean=$(mincstats -quiet -median -mask ${n4meanmask} -mask_range 1e-9,inf ${n4corrected})
-n4nonbrainmean=$(mincstats -quiet -floor $(mincstats -quiet -biModalT -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected}) \
-  -median -mask $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc -mask_binvalue 0 ${n4corrected})
-minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "A[1]>0?clamp(32767*A[0]/${n4brainmean},0,65535):clamp(32767*A[0]/${n4nonbrainmean},0,65535)" \
-  ${n4corrected} $(dirname ${n4brainmask})/$(basename ${n4brainmask} .mnc)_D.mnc $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
-  mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
+pctThigh=$(mincstats -quiet -mask ${n4classifymask} -mask_binvalue 3 -pctT 99.99 -bins ${histbins2} ${n4corrected})
+pctTlow=$(mincstats -quiet -mask ${n4classifymask} -mask_binvalue 1 -pctT 1 -bins ${histbins2} ${n4corrected})
+minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/${pctThigh}*65535,0,65535)" \
+  ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+
+mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 
 cp -f ${tmpdir}/corrected.mnc ${output}
 
