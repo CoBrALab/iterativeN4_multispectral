@@ -502,11 +502,12 @@ function make_qc() {
   convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%"  -append -trim ${tmpdir}/qc/*.rgb $(dirname ${output})/$(basename ${output} .mnc).jpg
 
 }
+
 function test_templates() {
 
   mkdir -p ${tmpdir}/test_templates
 
-  for configfile in $(dirname "$(readlink -f "$0")")/configs/*cfg; do
+  for configfile in $(dirname "$(readlink -f "$0")")/configs/auto/*cfg; do
 
     source ${configfile}
 
@@ -519,25 +520,25 @@ function test_templates() {
         --convergence [ 2025x2025x2025x2025x675,1e-6,10 ] \
         --shrink-factors 7x7x6x5x4 \
         --smoothing-sigmas 6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115mm \
-      --masks [ NOMASK,NOMASK ] \
+        --masks [ NOMASK,NOMASK ] \
       --transform Rigid[ 0.1 ] \
         --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,51,None ] \
         --convergence [ 2025x675x225,1e-6,10 ] \
         --shrink-factors 5x4x3 \
         --smoothing-sigmas 4.24660900144x3.39728720115x2.54796540086mm \
-      --masks [ NOMASK,NOMASK ] \
+        --masks [ NOMASK,NOMASK ] \
       --transform Similarity[ 0.1 ] \
         --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
         --convergence [ 675x225x75,1e-6,10 ] \
         --shrink-factors 4x3x2 \
         --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
-      --masks [ NOMASK,NOMASK ] \
+        --masks [ NOMASK,NOMASK ] \
       --transform Similarity[ 0.1 ] \
         --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
         --convergence [ 675x225x75,1e-6,10 ] \
         --shrink-factors 4x3x2 \
         --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058mm \
-      --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
+        --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
       --transform Affine[ 0.1 ] \
         --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
         --convergence [ 675x225x75x25x25,1e-6,10 ] \
