@@ -898,9 +898,9 @@ ImageMath 3 ${tmpdir}/${n}/3.mnc GetLargestComponent ${tmpdir}/${n}/3.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc addtozero ${tmpdir}/${n}/2.mnc ${tmpdir}/${n}/3.mnc
 iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 2 1 ball 1
 
-iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 4 1 ball 1
+iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 5 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mask2.mnc FillHoles ${tmpdir}/${n}/mask2.mnc 2
 
 if [[ -n ${excludemask} ]]; then
@@ -984,12 +984,14 @@ iMath 3 ${tmpdir}/${n}/mniprobmask.mnc MD ${tmpdir}/${n}/mniprobmask.mnc 2 1 bal
 ImageMath 3 ${tmpdir}/${n}/mniprobmask.mnc FillHoles ${tmpdir}/${n}/mniprobmask.mnc 2
 iMath 3 ${tmpdir}/${n}/mniprobmask.mnc ME ${tmpdir}/${n}/mniprobmask.mnc 1 1 ball 1
 
+ImageMath 3 ${tmpdir}/${n}/mnimask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mniprobmask.mnc
+
 #Last time we generate MNI mask, save it outside iterations
 cp -f ${tmpdir}/${n}/mniprobmask.mnc ${tmpdir}/mniprobmask.mnc
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
-mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/mask2.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/mask2.mnc
 mv -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/mask.mnc
 
 #Expand the mask a bit
@@ -1000,14 +1002,15 @@ if [[ -n ${excludemask} ]]; then
 fi
 
 #Do an initial classification using the MNI priors
-Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 25,0.001 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 -s 1x3 \
-  -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight} ] -k HistogramParzenWindows -m [ 0.1,1x1x1 ] \
-  -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
+Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
+  -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight} ] -k Gaussian -m [ 0.1,1x1x1 ] \
+  -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Aristotle[ 0 ] --winsorize-outliers BoxPlot \
+  -l [ 0.69314718055994530942,1 ]
 
 #Convert classification to the mask
 classify_to_mask
 
-ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/${n}/mniprobmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/classifymask.mnc
 
 #Generate outlier mask from white matter mask intensity
 ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
@@ -1072,7 +1075,7 @@ while true; do
     -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Socrates[ 1 ] --winsorize-outliers BoxPlot
 
   classify_to_mask
-  ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/$((n - 1))/mask2.mnc
+  ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/$((n - 1))/mask2.mnc
 
   #Form a new mask from voting prior masks
   ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
