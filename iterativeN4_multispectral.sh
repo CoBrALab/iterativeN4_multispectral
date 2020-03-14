@@ -356,10 +356,10 @@ function outlier_mask() {
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>50?0:1' ${tmpdir}/${n}/vessels.mnc ${tmpdir}/${n}/vesselmask.mnc
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc m ${tmpdir}/${n}/outlier_mask.mnc ${tmpdir}/${n}/vesselmask.mnc
-  median=$(mincstats -quiet -median -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  median=$(mincstats -quiet -median -hist_bins 512 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
 
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
-  mad=$(mincstats -quiet -median -hist_bins 4096 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
+  mad=$(mincstats -quiet -median -hist_bins 512 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
 
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "((0.6745*(A[0]-${median}))/${mad})>4.5?0:1" ${outlier_input} ${outlier_output}
   ImageMath 3 ${outlier_output} m ${outlier_output} ${tmpdir}/${n}/vesselmask.mnc
@@ -1159,8 +1159,8 @@ n4classifymask=${tmpdir}/finalclassify.mnc
 min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
 max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
 npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+pct25=$(mincstats -quiet -pctT 25 -hist_bins 512 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+pct75=$(mincstats -quiet -pctT 75 -hist_bins 512 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
 histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints} / (${n4shrink}**3) )**(-1.0/3.0)) ))")
 histbins2=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
