@@ -969,7 +969,7 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
   --smoothing-sigmas 3.39728720115x2.54796540086x1.69864360058x0mm \
   --masks [ ${tmpdir}/modelbrainmask.mnc,${tmpdir}/${n}/mask.mnc ]
 
-#Same Registration to MNI Space for QC
+#Save MNI space registration to QC later
 cp -f ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine.xfm
 
 #Resample MNI Priors to Native space for classification
