@@ -391,26 +391,37 @@ function do_N4_correct() {
   min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  pct25=$(mincstats -quiet -pctT 25 -hist_bins 512 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+  pct75=$(mincstats -quiet -pctT 75 -hist_bins 512 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
   histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(${n4shrink}**3))**(-1.0/3.0)) ))")
   histbins2=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
-  #Estimate bias field
-  N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-    -b [ 200 ] -c [ 50x50x50x50,1e-6 ] --histogram-sharpening [ 0.15,0.01,${histbins} ] \
-    -i ${n4input} \
-    -o [ ${n4corrected},${tmpdir}/${n}/bias1.mnc ] -r 0
+  if ((n == 0)); then
+    #Estimate bias field
+    N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s 2 -w ${n4weight} -x ${n4initmask} \
+      -b [ 200 ] -c [ 50x50x50x50,1e-6 ] --histogram-sharpening [ 0.15,0.01,${histbins2} ] \
+      -i ${n4input} \
+      -o [ $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect.mnc,${tmpdir}/${n}/bias1.mnc ] -r 0
 
-  minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${n4corrected} ${tmpdir}/${n}/N4_denoise.mnc
+    minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect.mnc \
+      $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect_denoise.mnc
+
+    ImageMath 3 ${tmpdir}/prebias.mnc / ${tmpdir}/${n}/bias1.mnc $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${tmpdir}/${n}/bias1.mnc)
+  else
+    if [[ ! -s $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect.mnc ]]; then
+      ImageMath 3 $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect.mnc / ${n4input} ${tmpdir}/prebias.mnc
+      minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect.mnc \
+        $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect_denoise.mnc
+    fi
+  fi
 
   #Estimate bias field
   N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
     -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ 0.05,0.01,${histbins} ] \
-    -i ${tmpdir}/${n}/N4_denoise.mnc \
+    -i $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect_denoise.mnc \
     -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
 
-  ImageMath 3 ${n4bias} m ${tmpdir}/${n}/bias1.mnc ${tmpdir}/${n}/bias2.mnc
+  ImageMath 3 ${n4bias} m ${tmpdir}/prebias.mnc ${tmpdir}/${n}/bias2.mnc
 
   #Normalize to mean 1
   ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
@@ -729,8 +740,11 @@ mv -f ${tmpdir}/input.crop.mnc ${input}
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
 
-mincresample -like ${input} ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/bias_resample.mnc
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/bias_resample.mnc
+cp -f ${tmpdir}/prebias.mnc ${tmpdir}/prebias_orig.mnc
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/prebias.mnc ${tmpdir}/prebias_resample.mnc
 mv -f ${tmpdir}/${n}/bias_resample.mnc ${tmpdir}/${n}/bias.mnc
+mv -f ${tmpdir}/prebias_resample.mnc ${tmpdir}/prebias.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/corrected.mnc -o ${tmpdir}/${n}/corrected.mnc -r ${input}
 ImageMath 3 ${tmpdir}/${n}/corrected.mnc m ${tmpdir}/${n}/corrected.mnc ${tmpdir}/headmask.mnc
@@ -1130,6 +1144,7 @@ fi
 
 #Transform all the working files into the original input space
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -like ${originput} ${tmpdir}/${n}/weight.mnc ${tmpdir}/finalweight.mnc
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${originput} ${tmpdir}/prebias_orig.mnc ${tmpdir}/finalprebias.mnc
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${originput} ${tmpdir}/nonzero.mnc
 
 ImageMath 3 ${tmpdir}/finalweight.mnc m ${tmpdir}/finalweight.mnc ${tmpdir}/nonzero.mnc
@@ -1157,11 +1172,7 @@ pct75=$(mincstats -quiet -pctT 75 -hist_bins 4096 -mask ${n4weight} -mask_range 
 histbins=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints} / (${n4shrink}**3) )**(-1.0/3.0)) ))")
 histbins2=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints})**(-1.0/3.0)) ))")
 
-#Estimate bias field
-N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-  -b [ 200 ] -c [ 50x50x50x50,1e-6 ] --histogram-sharpening [ 0.15,0.01,${histbins} ] \
-  -i ${n4input} \
-  -o [ ${n4corrected},${tmpdir}/${n}/bias1.mnc ] -r 0
+ImageMath 3 ${n4corrected} / ${n4input} ${tmpdir}/finalprebias.mnc
 
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${n4corrected} ${tmpdir}/N4_denoise.mnc
 
@@ -1171,7 +1182,7 @@ N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight
   -i ${tmpdir}/N4_denoise.mnc \
   -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
 
-ImageMath 3 ${n4bias} m ${tmpdir}/${n}/bias1.mnc ${tmpdir}/${n}/bias2.mnc
+ImageMath 3 ${n4bias} m ${tmpdir}/finalprebias.mnc ${tmpdir}/${n}/bias2.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o ${tmpdir}/finalmask.mnc -r ${n4corrected} -n GenericLabel
 
