@@ -612,26 +612,24 @@ n=0
 
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} --rician ${input} ${tmpdir}/${n}/t1.mnc
 
-ceil=$(mincstats -floor 1.01 -quiet -bins 4096 -pctT 95 ${tmpdir}/${n}/t1.mnc)
-floor=$(mincstats -ceil ${ceil} -quiet -bins 4096 -pctT 0.05 ${tmpdir}/${n}/t1.mnc)
+minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression "A[0]>$(mincstats -quiet -bins 512 -pctT 5 -floor 1e-6 -ceil $(mincstats -quiet -bins 512 -pctT 99 ${input}) ${input})" ${input} ${tmpdir}/${n}/weight1.mnc
+ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
+N4BiasFieldCorrection -d 3 -i ${input} -w ${tmpdir}/${n}/weight1.mnc -b [ 200 ] -c [ 50x50x50x50,1e-6 ] -o ${tmpdir}/${n}/precorrect1.mnc --verbose
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.005*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mean ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.5*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte \
+  -expression "A[0]>$(mincstats -quiet -floor $(mincstats -quiet -floor 1e-6 -bins 512 -pctT 1 ${tmpdir}/${n}/precorrect1.mnc) -ceil $(mincstats -quiet -floor 1e-6 -pctT 95 -bins 512 ${tmpdir}/${n}/precorrect1.mnc) -biModalT ${tmpdir}/${n}/precorrect1.mnc)" \
+  ${tmpdir}/${n}/precorrect1.mnc ${tmpdir}/${n}/weight2.mnc
+ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/${n}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc
-minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrected.mnc ${tmpdir}/${n}/t1.mnc
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight2.mnc
+minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/t1.mnc
 
 if [[ ${_arg_config} == "auto" ]]; then
   test_templates
@@ -705,35 +703,25 @@ ImageMath 3 ${tmpdir}/extractmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/model
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
 
-ceil=$(mincstats -floor 1.01 -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -quiet -bins 4096 -pctT 95 ${tmpdir}/${n}/t1.mnc)
-floor=$(mincstats -ceil ${ceil} -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -quiet -bins 4096 -pctT 0.05 ${tmpdir}/${n}/t1.mnc)
-
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.005*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>0.75*$(mincstats -quiet -floor ${floor} -ceil ${ceil} -mask ${tmpdir}/${n}/weight.mnc -mask_binvalue 1 -bins 4096 -biModalT ${tmpdir}/${n}/t1.mnc)?1:0" ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc ME ${tmpdir}/${n}/weight.mnc 1 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
-iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 1 1 ball 1
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?(A[1]>0?2:0):(A[1]>0?1:0)' ${tmpdir}/headmask.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight3.mnc
 
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${input} ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/nonzero.mnc
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
-  ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
+  ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${excludemask}
 fi
-
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/headmask.mnc
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight.mnc
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/headmask.mnc
 
 #Resample headmask into subject space, zero background and recrop
 ImageMath 3 ${input} PadImage ${input} 50
