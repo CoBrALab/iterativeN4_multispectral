@@ -677,25 +677,21 @@ else
       --convergence [ 2025x2025x2025x2025x675x225x75,1e-6,10 ] \
       --shrink-factors 6x6x6x5x4x3x2 \
       --smoothing-sigmas 6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
-      --masks [NOMASK,NOMASK] \
     --transform Rigid[ 0.1 ] \
       --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,51,None ] \
       --convergence [ 2025x2025x2025x2025x675x225x75,1e-6,10 ] \
       --shrink-factors 6x6x6x5x4x3x2 \
       --smoothing-sigmas 6.7945744023x5.94525260202x5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
-      --masks [${tmpdir}/modelheadmask.mnc,NOMASK] \
     --transform Similarity[ 0.1 ] \
       --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
       --convergence [ 2025x2025x675x225x75,1e-6,10 ] \
       --shrink-factors 6x5x4x3x2 \
       --smoothing-sigmas 5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
-      --masks [${tmpdir}/modelheadmask.mnc,NOMASK] \
     --transform Affine[ 0.1 ] \
       --metric Mattes[ ${tmpdir}/cropmodel.mnc,${tmpdir}/${n}/t1.mnc,1,64,None ] \
       --convergence [ 2025x2025x675x225x75,1e-6,10 ] \
       --shrink-factors 6x5x4x3x2 \
-      --smoothing-sigmas 5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm \
-      --masks [${tmpdir}/modelheadmask.mnc,NOMASK]
+      --smoothing-sigmas 5.09593080173x4.24660900144x3.39728720115x2.54796540086x1.69864360058mm
   fi
 
 ImageMath 3 ${tmpdir}/cropmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/modelheadmask.mnc
