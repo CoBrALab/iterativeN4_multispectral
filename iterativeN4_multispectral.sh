@@ -632,6 +632,11 @@ ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight2.mnc
 minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/t1.mnc
 
+minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte \
+  -expression "A[0]>$(mincstats -quiet -floor $(mincstats -quiet -floor 1e-6 -bins 512 -pctT 1 ${tmpdir}/${n}/precorrect2.mnc) -ceil $(mincstats -quiet -floor 1e-6 -pctT 95 -bins 512 ${tmpdir}/${n}/precorrect2.mnc) -biModalT ${tmpdir}/${n}/precorrect2.mnc)" \
+  ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/weight3.mnc
+ImageMath 3 ${tmpdir}/${n}/weight3.mnc GetLargestComponent ${tmpdir}/${n}/weight3.mnc
+
 if [[ ${_arg_config} == "auto" ]]; then
   test_templates
 fi
@@ -700,25 +705,25 @@ ImageMath 3 ${tmpdir}/extractmodel.mnc m ${tmpdir}/cropmodel.mnc ${tmpdir}/model
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?(A[1]>0?2:0):(A[1]>0?1:0)' ${tmpdir}/headmask.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight3.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?(A[1]>0?2:0):(A[1]>0?1:0)' ${tmpdir}/headmask.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/weight4.mnc
 
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${input} ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/nonzero.mnc
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/nonzero.mnc
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/hotmask.mnc
 
 #Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
-  ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${excludemask}
+  ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${excludemask}
 fi
 
 #Generate a whole-image mask to force N4 to always do correction over whole image
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/weight3.mnc m ${tmpdir}/${n}/weight3.mnc ${tmpdir}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${tmpdir}/nonzero.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/headmask.mnc
+do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/headmask.mnc
 
 #Resample headmask into subject space, zero background and recrop
 ImageMath 3 ${input} PadImage ${input} 50
