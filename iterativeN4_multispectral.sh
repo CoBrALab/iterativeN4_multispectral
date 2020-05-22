@@ -356,10 +356,10 @@ function outlier_mask() {
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>50?0:1' ${tmpdir}/${n}/vessels.mnc ${tmpdir}/${n}/vesselmask.mnc
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
   ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc m ${tmpdir}/${n}/outlier_mask.mnc ${tmpdir}/${n}/vesselmask.mnc
-  median=$(mincstats -quiet -median -hist_bins 512 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  median=$(mincstats -quiet -median -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
 
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
-  mad=$(mincstats -quiet -median -hist_bins 512 -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
+  mad=$(mincstats -quiet -median -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
 
   minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "((0.6745*(A[0]-${median}))/${mad})>4.5?0:1" ${outlier_input} ${outlier_output}
   ImageMath 3 ${outlier_output} m ${outlier_output} ${tmpdir}/${n}/vesselmask.mnc
@@ -382,8 +382,10 @@ function do_N4_correct() {
   local pct25
   local pct75
   local npoints
-  local histbins
+  local npoints3
+  local npoints1
   local histbins_precorrect
+  local histbins_shrink
   local histbins1
   local histbins3
   local pctTlow
@@ -398,20 +400,16 @@ function do_N4_correct() {
   ImageMath 3 $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc GetLargestComponent \
     $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc
 
-  #Calculate bins for N4 with Freedman-Diaconis’s Rule
-  min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  npoints3=$(mincstats -quiet -count -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_range 1e-9,inf ${n4input})
-  npoints1=$(mincstats -quiet -count -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_range 1e-9,inf ${n4input})
-  pct25=$(mincstats -quiet -pctT 25 -hist_bins 512 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  pct75=$(mincstats -quiet -pctT 75 -hist_bins 512 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-  histbins_shrink=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(${n4shrink}**3))**(-1.0/3.0)) ))")
-  histbins_precorrect=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(2**3))**(-1.0/3.0)) ))")
-  histbins3=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints3})**(-1.0/3.0)) ))")
-  histbins1=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints1})**(-1.0/3.0)) ))")
 
   if ((n == 0)); then
+    #Calculate bins for N4 with Freedman-Diaconis’s Rule
+    min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+    max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+    npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+    pct25=$(mincstats -quiet -pctT 25 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+    pct75=$(mincstats -quiet -pctT 75 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+    histbins_precorrect=$(python -c "print( min(200,int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(4**3))**(-1.0/3.0)) )))")
+
     #Estimate bias field
     N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s 2 -w ${n4weight} -x ${n4initmask} \
       -b [ 200 ] -c [ 50x50x50x50,1e-6 ] --histogram-sharpening [ 0.15,0.01,${histbins_precorrect} ] \
@@ -430,17 +428,39 @@ function do_N4_correct() {
     fi
   fi
 
-  #Estimate bias field
-  N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-    -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ 0.05,0.01,${histbins_shrink} ] \
-    -i $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc)_precorrect_denoise.mnc \
-    -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
+    #Calculate bins for N4 with Freedman-Diaconis’s Rule
+    min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
+    max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
+    npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
+    npoints3=$(mincstats -quiet -count -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4input})
+    npoints1=$(mincstats -quiet -count -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4input})
+    pct25=$(mincstats -quiet -pctT 25 -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
+    pct75=$(mincstats -quiet -pctT 75 -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
+    histbins_shrink=$(python -c "print( min(200,int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(${n4shrink}**3))**(-1.0/3.0)) )))")
 
-  ImageMath 3 ${n4bias} m ${tmpdir}/prebias.mnc ${tmpdir}/${n}/bias2.mnc
+    #Estimate bias field
+    N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
+      -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ 0.05,0.01,${histbins_shrink} ] \
+      -i ${tmpdir}/precorrect_denoise.mnc \
+      -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
 
-  #Normalize to mean 1
-  ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
-  ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
+    ImageMath 3 ${n4bias} m ${tmpdir}/prebias.mnc ${tmpdir}/${n}/bias2.mnc
+    ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
+    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
+
+    min=$(mincstats -quiet -min -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
+    max=$(mincstats -quiet -max -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
+    pct25=$(mincstats -quiet -pctT 25 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
+    pct75=$(mincstats -quiet -pctT 75 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
+    histbins3=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints3})**(-1.0/3.0)) ))")
+
+    min=$(mincstats -quiet -min -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
+    max=$(mincstats -quiet -max -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
+    pct25=$(mincstats -quiet -pctT 25 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
+    pct75=$(mincstats -quiet -pctT 75 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
+    histbins1=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints1})**(-1.0/3.0)) ))")
+
+
   if ((n == 0)); then
     pctThigh=65535
     pctTlow=0
@@ -449,6 +469,7 @@ function do_N4_correct() {
     pctTlow=$(mincstats -quiet -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 -pctT 1 -bins ${histbins1} ${n4corrected})
   fi
 
+  #Rescale and stretch contrast inside brain
   minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/${pctThigh}*65535,0,65535)" \
     ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
   mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
