@@ -10,21 +10,20 @@ BEaST patch based segmentation tool.
 ```
 > iterativeN4_multispectral.sh -h 
 iterativeN4_multispectral.sh is script which performs iterative inhomogeneity (bias field) correction and classification on T1w (and optionally T2w/PDw) MRI scans
-Usage: /home/cic/devgab/projects/src/iterativeN4/iterativeN4_multispectral.sh [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [-d|--(no-)denoise] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>
-  <input>: T1w scan to be corrected
-  <output>: Output filename for corrected T1w (also used as basename for other outputs)
-  -e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)
-  -c, --config: Path to an alternative config file defining priors to use (no default)
-  -l, --logfile: Path to file to log all output (no default)
-  -s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)
-  -a, --autocrop, --no-autocrop: Crop the final output to 10 mm around the skull (off by default)
-  -d, --denoise, --no-denoise: Denoise the final output files (off by default)
-  --max-iterations: Maximum number of iterations to run (default: '10')
-  --convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.005')
-  --classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')
-  --debug, --no-debug: Debug mode, increase verbosity further, don't cleanup (off by default)
-  -v, --verbose: Set verbose output (can be specified multiple times to increase the effect)
-  -h, --help: Prints help
+Usage: iterativeN4_multispectral.sh [-e|--exclude <arg>] [-c|--config <arg>] [-l|--logfile <arg>] [-s|--(no-)standalone] [-a|--(no-)autocrop] [--max-iterations <arg>] [--convergence-threshold <arg>] [--classification-prior-weight <arg>] [--(no-)debug] [-v|--verbose] [-h|--help] <input> <output>
+        <input>: T1w scan to be corrected
+        <output>: Output filename for corrected T1w (also used as basename for other outputs)
+        -e, --exclude: Mask file defining regions to exclude from classifcation, region is still corrected (no default)
+        -c, --config: Path to an alternative config file defining priors to use, use "auto" to use automatic template selection (no default)
+        -l, --logfile: Path to file to log all output (no default)
+        -s, --standalone, --no-standalone: Script is run standalone so save all outputs (off by default)
+        -a, --autocrop, --no-autocrop: Crop the final output to 10 mm around the head determined by headmask from modelspace (off by default)
+        --max-iterations: Maximum number of iterations to run (default: '10')
+        --convergence-threshold: Coeffcient of variation limit between two bias field estimates (default: '0.01')
+        --classification-prior-weight: How much weight is given to prior classification proabilities during iteration (default: '0.25')
+        --debug, --no-debug: Debug mode, increase verbosity further, don't cleanup (off by default)
+        -v, --verbose: Set verbose output (can be specified multiple times to increase the effect)
+        -h, --help: Prints help
 ```
 
 **Note: multispectral support is currently not enabled**
