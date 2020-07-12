@@ -628,6 +628,7 @@ ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -max -quiet ${input}) ${input} ${tmpdir}/input.clamp.mnc
 ImageMath 3 ${input} RescaleImage ${tmpdir}/input.clamp.mnc 0 65535
 rm -f ${tmpdir}/input.clamp.mnc
+ImageMath 3 ${input} PadImage ${input} 20
 
 #Generate a global nonzero mask to always exclude pure background
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
