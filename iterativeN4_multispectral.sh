@@ -513,37 +513,37 @@ function make_qc() {
 
     #Trasverse
     create_verify_image -range_floor 0 ${tmpdir}/qc/t.rgb \
-        -width 1920 -autocols 9 -autocol_planes t \
+        -width 1920 -autocols 10 -autocol_planes t \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:gray \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
     create_verify_image -range_floor 0 ${tmpdir}/qc/t2.rgb \
-        -width 1920 -autocols 9 -autocol_planes t \
+        -width 1920 -autocols 10 -autocol_planes t \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:spect
 
     #Saggital
     create_verify_image -range_floor 0 ${tmpdir}/qc/s.rgb \
-        -width 1920 -autocols 9 -autocol_planes s \
+        -width 1920 -autocols 10 -autocol_planes s \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:gray \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
     create_verify_image -range_floor 0 ${tmpdir}/qc/s2.rgb \
-        -width 1920 -autocols 9 -autocol_planes s \
+        -width 1920 -autocols 10 -autocol_planes s \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:spect
 
     #Coronal
     create_verify_image -range_floor 0 ${tmpdir}/qc/c.rgb \
-        -width 1920 -autocols 9 -autocol_planes c \
+        -width 1920 -autocols 10 -autocol_planes c \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:gray \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
     create_verify_image -range_floor 0 ${tmpdir}/qc/c2.rgb \
-        -width 1920 -autocols 9 -autocol_planes c \
+        -width 1920 -autocols 10 -autocol_planes c \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/corrected.mnc color:spect
 
