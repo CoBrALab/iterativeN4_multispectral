@@ -991,8 +991,10 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
             --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask2.mnc ]
 
 cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
+iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
-ImageMath 3 ${tmpdir}/${n}/t1.extracted.mnc m ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/mask.mnc
+ImageMath 3 ${tmpdir}/${n}/t1.extracted.mnc m ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/extractmask.mnc
+ImageMath 3 ${tmpdir}/extractmodel.mnc m ${REGISTRATIONMODEL} ${REGISTRATIONBRAINMASK}
 
 #Non linearly register priors
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
