@@ -924,7 +924,7 @@ if [[ -n ${excludemask} ]]; then
 fi
 
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
-    -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.05 ] -k Gaussian -m [ 0.1,1x1x1 ] \
+    -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.1 ] -k Gaussian -m [ 0.1,1x1x1 ] \
     -o ${tmpdir}/${n}/classify.mnc -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
 
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
@@ -1108,8 +1108,9 @@ while true; do
 
     #Do an initial classification using the last round posteriors, remove outliers
     Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
-        -i PriorProbabilityImages[ 3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,${_arg_classification_prior_weight} ] -k Gaussian -m [ 0.1,1x1x1 ] \
-        -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Socrates[ 1 ] --winsorize-outliers BoxPlot
+        -i PriorProbabilityImages[ 3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,0.5 ] -k Gaussian -m [ 0.1,1x1x1 ] \
+        -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Aristotle[ 1 ] --winsorize-outliers BoxPlot \
+        -l [ 0.69314718055994530942,1 ]
 
     classify_to_mask
     ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/$((n - 1))/mask2.mnc
