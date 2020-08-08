@@ -842,6 +842,10 @@ mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${
 mv -f ${tmpdir}/${n}/bias_resample.mnc ${tmpdir}/${n}/bias.mnc
 mv -f ${tmpdir}/prebias_resample.mnc ${tmpdir}/prebias.mnc
 
+if [[ -n ${_arg_exclude} ]]; then
+    antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${excludemask} -r ${input} -n GenericLabel -o ${excludemask}
+fi
+
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/corrected.mnc -o ${tmpdir}/${n}/corrected.mnc -r ${input}
 ImageMath 3 ${tmpdir}/${n}/corrected.mnc m ${tmpdir}/${n}/corrected.mnc ${tmpdir}/headmask.mnc
 
