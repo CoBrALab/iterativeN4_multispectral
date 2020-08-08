@@ -913,7 +913,9 @@ iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
 cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
 
-iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/mask_D.mnc addtozero ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/mnimask.mnc
+
+iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
 
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${WMPRIOR} \
@@ -1034,14 +1036,12 @@ iMath 3 ${tmpdir}/${n}/mniprobmask.mnc MD ${tmpdir}/${n}/mniprobmask.mnc 2 1 bal
 ImageMath 3 ${tmpdir}/${n}/mniprobmask.mnc FillHoles ${tmpdir}/${n}/mniprobmask.mnc 2
 iMath 3 ${tmpdir}/${n}/mniprobmask.mnc ME ${tmpdir}/${n}/mniprobmask.mnc 1 1 ball 1
 
-ImageMath 3 ${tmpdir}/${n}/mnimask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mniprobmask.mnc
-
 #Last time we generate MNI mask, save it outside iterations
 cp -f ${tmpdir}/${n}/mniprobmask.mnc ${tmpdir}/mniprobmask.mnc
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
 
 #Combine the masks because sometimes beast misses badly biased cerebellum
-mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/mask2.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/mask2.mnc
 mv -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/mask.mnc
 
 #Expand the mask a bit
@@ -1065,7 +1065,7 @@ Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 
 #Convert classification to the mask
 classify_to_mask
 
-ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/classifymask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/classifymask.mnc
 
 #Generate outlier mask from white matter mask intensity
 ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
@@ -1135,7 +1135,7 @@ while true; do
         -l [ 0.69314718055994530942,1 ]
 
     classify_to_mask
-    ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc ${tmpdir}/$((n - 1))/mask2.mnc
+    ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc
 
     #Form a new mask from voting prior masks
     ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
