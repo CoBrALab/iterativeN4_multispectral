@@ -344,27 +344,23 @@ originput=${_arg_input}
 input=${tmpdir}/t1.mnc
 
 function outlier_mask() {
-    #Generate an outlier map using modified z-score
-    #Also exlcude anything that looks like a blood vessel
-    #https://www.itl.nist.gov/div898/handbook/eda/section3/eda35h.htm
-    local outlier_input=$1
-    local outlier_mask=$2
-    local outlier_output=$3
+  #Generate an outlier mask which combines the vessel segmentation and 99.5 percentile
+  local outlier_input=$1
+  local outlier_mask=$2
+  local outlier_output=$3
 
-    local median
-    local mad
+  local median
+  local mad
 
-    itk_vesselness --clobber --rescale --scales 8 ${outlier_input} ${tmpdir}/${n}/vessels.mnc
-    minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>50?0:1' ${tmpdir}/${n}/vessels.mnc ${tmpdir}/${n}/vesselmask.mnc
-    ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc GetLargestComponent ${outlier_mask}
-    ImageMath 3 ${tmpdir}/${n}/outlier_mask.mnc m ${tmpdir}/${n}/outlier_mask.mnc ${tmpdir}/${n}/vesselmask.mnc
-    median=$(mincstats -quiet -median -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${outlier_input})
+  median=$(mincstats -quiet -median -mask ${outlier_mask} -mask_binvalue 1 ${outlier_input})
 
-    minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
-    mad=$(mincstats -quiet -median -mask ${tmpdir}/${n}/outlier_mask.mnc -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
+  mad=$(mincstats -quiet -median -mask ${outlier_mask} -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
 
-    minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "((0.6745*(A[0]-${median}))/${mad})>4.5?0:1" ${outlier_input} ${outlier_output}
-    ImageMath 3 ${outlier_output} m ${outlier_output} ${tmpdir}/${n}/vesselmask.mnc
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "(((0.6745*(A[0]-${median}))/${mad})<4.75)&&(A[1]<45)?1:0" \
+    ${outlier_input} ${tmpdir}/vessels.mnc ${outlier_output}
+
+}
 }
 
 #Function used to do bias field correction
@@ -858,6 +854,7 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 mkdir -p ${tmpdir}/${n}
 
 minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/${n}/t1.mnc ${tmpdir}/vessels.mnc
 
 #First try registration to MNI space, multistep
 if [[ -s ${tmpdir}/template_bootstrap.xfm ]]; then
@@ -930,6 +927,9 @@ if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
 fi
 
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.1 ] -k Gaussian -m [ 0.1,1x1x1 ] \
     -o ${tmpdir}/${n}/classify.mnc -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
@@ -947,13 +947,12 @@ iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 2 1 ball 1
 iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 5 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mask2.mnc FillHoles ${tmpdir}/${n}/mask2.mnc 2
 
+#User provided exclusion mask
 if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${excludemask}
 fi
 
-#Generate a hotmask using the kmeans brainmask
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
-#Remove really hot voxels from weight for N4
+#Remove outliers round 2
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
@@ -1050,6 +1049,11 @@ if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
 fi
 
+ThresholdImage 3 ${tmpdir}/$((n - 1))/classify.mnc ${tmpdir}/${n}/outlier_wm.mnc 3 3 1 0
+ImageMath 3 ${tmpdir}/${n}/outlier_wm.mnc GetLargestComponent ${tmpdir}/${n}/outlier_wm.mnc
+outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/outlier_wm.mnc ${tmpdir}/${n}/hotmask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+
 #Do an initial classification using the MNI priors
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,${_arg_classification_prior_weight} ] -k Gaussian -m [ 0.1,1x1x1 ] \
@@ -1064,7 +1068,7 @@ ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpd
 #Generate outlier mask from white matter mask intensity
 ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
 ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/hotmask.mnc
+
 
 #Combine GM and WM proabability images into a N4 mask,
 ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
@@ -1118,6 +1122,10 @@ while true; do
         ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
     fi
 
+    ThresholdImage 3 ${tmpdir}/$((n - 1))/classify.mnc ${tmpdir}/${n}/outlier_wm.mnc 3 3 1 0
+    ImageMath 3 ${tmpdir}/${n}/outlier_wm.mnc GetLargestComponent ${tmpdir}/${n}/outlier_wm.mnc
+    outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/outlier_wm.mnc ${tmpdir}/${n}/hotmask.mnc
+    ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
     #Do an initial classification using the last round posteriors, remove outliers
     Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
         -i PriorProbabilityImages[ 3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,0.5 ] -k Gaussian -m [ 0.1,1x1x1 ] \
@@ -1130,7 +1138,6 @@ while true; do
     #Form a new mask from voting prior masks
     ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
     ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
-    outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/hotmask.mnc
 
     #Combine GM and WM probably images into a N4 mask,
     ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
