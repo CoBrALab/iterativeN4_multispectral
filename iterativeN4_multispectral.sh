@@ -361,6 +361,42 @@ function outlier_mask() {
     ${outlier_input} ${tmpdir}/vessels.mnc ${outlier_output}
 
 }
+
+function renorm() {
+  #Renormalize image 0.1%-(GM/WM mean)-99.9% to 0-32767-65535 using a classification mask
+  #Compute the percentiles using the GM/WM mask
+  #Achieved via solving a linear system to get a 2nd order polynomial remapping
+  #of the intensity values
+
+  local renorm_input=$1
+  local renorm_classification=$2
+  local usebrainmask="${3:-}"
+
+  local wmbinvalue
+  local gmbinvalue
+
+  if [[ -n ${usebrainmask} ]]; then
+      wmbinvalue=1
+      gmbinvalue=1
+    else
+      wmbinvalue=3
+      gmbinvalue=2
+  fi
+
+  #Compute the percentiles and median values of GM and WM
+  valuelow=$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 1 ${renorm_input})
+  valuewm=$(mincstats -quiet -median -mask ${renorm_classification} -mask_binvalue ${wmbinvalue} ${renorm_input})
+  valuegm=$(mincstats -quiet -median -mask ${renorm_classification} -mask_binvalue ${gmbinvalue} ${renorm_input})
+  valuehigh=$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 99 ${renorm_input})
+
+  #Solve the linear system of a quadratic polynomial mapping the input values to 0-32767-65535
+  mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
+
+  #Apply the mpapping
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
+    ${renorm_input} $(dirname ${renorm_input})/$(basename ${renorm_input} .mnc).norm.mnc
+
+  mv -f $(dirname ${renorm_input})/$(basename ${renorm_input} .mnc).norm.mnc ${renorm_input}
 }
 
 #Function used to do bias field correction
@@ -375,101 +411,154 @@ function do_N4_correct() {
     local n4shrink=$7
     local n4classifymask=$8
 
-    local min
-    local max
-    local pct25
-    local pct75
-    local npoints
-    local npoints3
-    local npoints1
-    local histbins_precorrect
-    local histbins_shrink
-    local histbins1
-    local histbins3
-    local pctTlow
-    local pctThigh
+    #Estimate bias field
+    N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
+        -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ 0.05,0.01,200 ] \
+        -i ${tmpdir}/${n}/t1.mnc \
+        -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
 
-    #Construct some files from the classifier for doing the contrast stretching
-    ThresholdImage 3 ${n4classifymask} $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc 3 3 1 0
-    ThresholdImage 3 ${n4classifymask} $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc 1 1 1 0
-    iMath 3 $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc ME \
-        $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc 1 1 ball 1
-    iMath 3 $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc ME \
-        $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc 1 1 ball 1
-    ImageMath 3 $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc GetLargestComponent \
-        $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc
+    ImageMath 3 ${tmpdir}/${n}/bias2.mnc / ${tmpdir}/${n}/bias2.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/bias2.mnc)
+    ImageMath 3 ${n4bias} m ${tmpdir}/prebias.mnc ${tmpdir}/${n}/bias2.mnc
+    ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean ${n4bias})
+    ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
+    cp -f ${n4bias} ${tmpdir}/prebias.mnc
 
-    #For the first round, we compute the precorrect bias field, to handle skull and neck bias
-    if ((n == 0)); then
-        #Calculate bins for N4 with Freedman-Diaconis’s Rule
-        min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-        max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-        npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-        pct25=$(mincstats -quiet -pctT 25 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-        pct75=$(mincstats -quiet -pctT 75 -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-        histbins_precorrect=$(python -c "print( min(200,int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(4**3))**(-1.0/3.0)) )))")
+    renorm ${n4corrected} ${n4classifymask}
+}
 
-        #Estimate bias field
-        N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s 4 -w ${n4weight} -x ${n4initmask} \
-            -b [ 200 ] -c [ 1000x1000x1000,1e-4 ] --histogram-sharpening [ 0.05,0.01,${histbins_precorrect} ] \
-            -i ${n4input} \
-            -o [ ${n4corrected},${n4bias} ] -r 0
+function iterative_precorrect() {
 
-        ImageMath 3 ${tmpdir}/prebias.mnc / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
-        cp -f ${tmpdir}/prebias.mnc ${n4bias}
+  local pctTlow
+  local pctThigh
+
+  #Foreground/background via multi-level otsu
+  ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight1.mnc Otsu 4 ${tmpdir}/nonzero.mnc
+  ThresholdImage 3 ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/weight1.mnc 2 Inf 1 0
+  ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
+  iMath 3 ${tmpdir}/${n}/weight1.mnc MC ${tmpdir}/${n}/weight1.mnc 2 1 ball 1
+  ImageMath 3 ${tmpdir}/${n}/weight1.mnc FillHoles ${tmpdir}/${n}/weight1.mnc 2
+  cp -f ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/mask1.mnc
+  ImageMath 3 ${tmpdir}/${n}/weight1.mnc m ${tmpdir}/${n}/weight1.mnc ${tmpdir}/nonzero.mnc
+  ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
+
+  #Exclude Hotspots
+  minccalc -quiet ${N4_VERBOSE:+-verbose} \
+    -expression "A[0]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)?A[1]:0" \
+    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/weighttemp.mnc
+  mv -f ${tmpdir}/${n}/weighttemp.mnc ${tmpdir}/${n}/weight1.mnc
+
+  N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 50x50x50x50,0 ] \
+    -w ${tmpdir}/${n}/weight1.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 4 --verbose \
+    --histogram-sharpening [ 0.15,0.01,200 ]
+
+  ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc \
+    $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
+  ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/bias.mnc
+
+  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
+  mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
+
+  #Second round Foreground/background via multi-level otsu
+  ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight2.mnc Otsu 4 ${tmpdir}/nonzero.mnc
+  ThresholdImage 3 ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight2.mnc 2 Inf 1 0
+  ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
+  iMath 3 ${tmpdir}/${n}/weight2.mnc MC ${tmpdir}/${n}/weight2.mnc 3 1 ball 1
+  ImageMath 3 ${tmpdir}/${n}/weight2.mnc FillHoles ${tmpdir}/${n}/weight2.mnc 2
+  cp -f ${tmpdir}/${n}/weight2.mnc  ${tmpdir}/${n}/mask2.mnc
+  cp -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/fgmask.mnc
+  ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/nonzero.mnc
+  ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
+
+  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 0.1 ${input})
+  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.9 ${input})
+  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+    ${input} ${tmpdir}/${n}/t1.mnc
+  cp ${tmpdir}/${n}/t1.mnc ${tmpdir}/t1.renorm.mnc
+  input=${tmpdir}/t1.renorm.mnc
+
+  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
+  ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/nonzero.mnc
+
+  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+    -expression "A[0]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc)?A[1]:0" \
+    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weighttemp.mnc
+  mv -f ${tmpdir}/${n}/weighttemp.mnc ${tmpdir}/${n}/weight2.mnc
+
+  N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 50x50x50x50,0 ] \
+    -w ${tmpdir}/${n}/weight2.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 4 --verbose \
+    --histogram-sharpening [ 0.15,0.01,200 ]
+
+  ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc \
+    $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
+  ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/bias.mnc
+
+  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
+  mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
+
+  cp -f ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/prebias.mnc
+
+  itk_vesselness --scales 8 --rescale ${tmpdir}/${n}/t1.mnc ${tmpdir}/vessels.mnc
+
+  i=0
+
+  while true; do
+
+    ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc Otsu 4 ${tmpdir}/${n}/mask$((2 + i)).mnc
+    ThresholdImage 3 ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/otsu.mnc 2 Inf 1 0
+
+    ImageMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc GetLargestComponent ${tmpdir}/${n}/otsu.mnc
+    iMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc MC ${tmpdir}/${n}/mask$((3 + i)).mnc 8 1 ball 1
+    ImageMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc FillHoles ${tmpdir}/${n}/mask$((3 + i)).mnc 2
+    cp -f ${tmpdir}/${n}/mask$((3 + i)).mnc ${tmpdir}/fgmask.mnc
+
+    if [[ $i == 0 ]]; then
+      ImageMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc + ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/mask$((2 + i)).mnc
+      minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+        -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
+        ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight$((3 + i)).mnc
     else
-        if [[ ! -s ${tmpdir}/precorrect.mnc ]]; then
-            ImageMath 3 ${tmpdir}/precorrect.mnc / ${n4input} ${tmpdir}/prebias.mnc
-            minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/precorrect.mnc \
-                ${tmpdir}/precorrect_denoise.mnc
-        fi
-
-        #Calculate bins for N4 with Freedman-Diaconis’s Rule
-        min=$(mincstats -quiet -min -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
-        max=$(mincstats -quiet -max -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
-        npoints=$(mincstats -quiet -count -mask ${n4weight} -mask_range 1e-9,inf ${n4input})
-        npoints3=$(mincstats -quiet -count -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4input})
-        npoints1=$(mincstats -quiet -count -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4input})
-        pct25=$(mincstats -quiet -pctT 25 -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
-        pct75=$(mincstats -quiet -pctT 75 -mask ${n4weight} -mask_range 1e-9,inf ${tmpdir}/precorrect_denoise.mnc)
-        histbins_shrink=$(python -c "print( min(200,int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints}/(${n4shrink}**3))**(-1.0/3.0)) )))")
-
-        #Estimate bias field
-        N4BiasFieldCorrection ${N4_VERBOSE:+--verbose} -d 3 -s ${n4shrink} -w ${n4weight} -x ${n4initmask} \
-            -b [ 200 ] -c [ 300x300x300x300,1e-5 ] --histogram-sharpening [ 0.05,0.01,${histbins_shrink} ] \
-            -i ${tmpdir}/precorrect_denoise.mnc \
-            -o [ ${n4corrected},${tmpdir}/${n}/bias2.mnc ] -r 0
-
-        ImageMath 3 ${n4bias} m ${tmpdir}/prebias.mnc ${tmpdir}/${n}/bias2.mnc
-        ImageMath 3 ${n4bias} / ${n4bias} $(mincstats -quiet -mean -mask ${n4brainmask} -mask_binvalue 1 ${n4bias})
-        ImageMath 3 ${n4corrected} / ${n4input} ${n4bias}
-
-        min=$(mincstats -quiet -min -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
-        max=$(mincstats -quiet -max -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
-        pct25=$(mincstats -quiet -pctT 25 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
-        pct75=$(mincstats -quiet -pctT 75 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 ${n4corrected})
-        histbins3=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints3})**(-1.0/3.0)) ))")
-
-        min=$(mincstats -quiet -min -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
-        max=$(mincstats -quiet -max -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
-        pct25=$(mincstats -quiet -pctT 25 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
-        pct75=$(mincstats -quiet -pctT 75 -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 ${n4corrected})
-        histbins1=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints1})**(-1.0/3.0)) ))")
+      minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+        -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
+        ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight$((3 + i)).mnc
+      iMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc ME ${tmpdir}/${n}/otsu.mnc 1 1 ball 1
+      ImageMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc GetLargestComponent ${tmpdir}/${n}/weight$((3 + i)).mnc
+      iMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc MD ${tmpdir}/${n}/weight$((3 + i)).mnc 1 1 ball 1
     fi
 
+    N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 300x300x300x300,1e-4 ] \
+      -w ${tmpdir}/${n}/weight$((3 + i)).mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
+      --histogram-sharpening [ 0.05,0.01,200 ] -r 0
 
-    if ((n == 0)); then
-        pctThigh=65535
-        pctTlow=0
-    else
-        pctThigh=$(mincstats -quiet -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_3.mnc -mask_binvalue 1 -pctT 99.99 -bins ${histbins3} ${n4corrected})
-        pctTlow=$(mincstats -quiet -mask $(dirname ${n4classifymask})/$(basename ${n4classifymask} .mnc)_1.mnc -mask_binvalue 1 -pctT 1 -bins ${histbins1} ${n4corrected})
-    fi
+    ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
+    ImageMath 3 ${tmpdir}/${n}/prebias.mnc m ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias.mnc
+    ImageMath 3 ${tmpdir}/${n}/prebias.mnc / ${tmpdir}/${n}/prebias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/prebias.mnc)
+    ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
 
-    #Rescale and stretch contrast inside brain 1%-99.99%
-    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/${pctThigh}*65535,0,65535)" \
-        ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
-    mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
+    ((++i))
+    [[ ( ${i} -le 2 ) ]] || break
+
+    pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+    pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+      ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
+    mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
+
+  done
+
+  ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
+
+  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+  minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+      ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/corrected.mnc
+
+  minc_anlm ${N4_VERBOSE:+--verbose} --clobber --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/t1.mnc
 }
 
 #Convert classify image into a mask
@@ -716,54 +805,25 @@ else
     excludemask=""
 fi
 
-
 ################################################################################
 #Round 0
-#- precorrect with 5% floor mask
-#- precorrect with 5% mask, with a recomputed ceiling and floor
-#- do template selection if requested
-#- register head-to-head to get a head mask
-#- precorrect with weighted head-neck mask with Otsu with recomputed ceiling and floor
-#Also estimate headmask and crop the internal files
+#Iterative estimation of a mask with multilevel otsu to find foreground-background
+#Also found forground mask and use it combined to template FOV registration to
+#trim the FOV to generate a headmask
 ################################################################################
 n=0
 
 mkdir -p ${tmpdir}/${n}
 
-minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} --rician ${input} ${tmpdir}/${n}/t1.mnc
+minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${input} ${tmpdir}/${n}/t1.mnc
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression "A[0]>$(mincstats -quiet -bins 512 -pctT 5 -floor 1e-6 -ceil $(mincstats -quiet -bins 512 -pctT 99 ${input}) ${input})" ${input} ${tmpdir}/${n}/weight1.mnc
-ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
-N4BiasFieldCorrection -d 3 -i ${input} -w ${tmpdir}/${n}/weight1.mnc -b [ 200 ] -c [ 50x50x50x50,1e-6 ] -o ${tmpdir}/${n}/precorrect1.mnc --verbose
+iterative_precorrect
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte \
-    -expression "A[0]>$(mincstats -quiet -floor $(mincstats -quiet -floor 1e-6 -bins 512 -pctT 1 ${tmpdir}/${n}/precorrect1.mnc) -ceil $(mincstats -quiet -floor 1e-6 -pctT 95 -bins 512 ${tmpdir}/${n}/precorrect1.mnc) -biModalT ${tmpdir}/${n}/precorrect1.mnc)" \
-    ${tmpdir}/${n}/precorrect1.mnc ${tmpdir}/${n}/weight2.mnc
-ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
-
-#Generate a whole-image mask to force N4 to always do correction over whole image
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${tmpdir}/${n}/t1.mnc ${tmpdir}/initmask.mnc
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/nonzero.mnc
-
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/${n}/weight2.mnc
-minc_anlm --clobber ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/t1.mnc
-
-minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte \
-    -expression "A[0]>$(mincstats -quiet -floor $(mincstats -quiet -floor 1e-6 -bins 512 -pctT 1 ${tmpdir}/${n}/precorrect2.mnc) -ceil $(mincstats -quiet -floor 1e-6 -pctT 95 -bins 512 ${tmpdir}/${n}/precorrect2.mnc) -biModalT ${tmpdir}/${n}/precorrect2.mnc)" \
-    ${tmpdir}/${n}/precorrect2.mnc ${tmpdir}/${n}/weight3.mnc
-ImageMath 3 ${tmpdir}/${n}/weight3.mnc GetLargestComponent ${tmpdir}/${n}/weight3.mnc
-
+#If the "auto" template method is selected, do the registrations and CC
+#estimate to find best matching model
 if [[ ${_arg_config} == "auto" ]]; then
     test_templates
 fi
-
-#Generate model headmask recropped image extracted brain
-ImageMath 3 ${tmpdir}/modelheadmask.mnc ThresholdAtMean ${REGISTRATIONMODEL} 0.5
-ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
-iMath 3 ${tmpdir}/modelheadmask.mnc MC ${tmpdir}/modelheadmask.mnc 6 1 ball 1
-ImageMath 3 ${tmpdir}/modelheadmask.mnc FillHoles ${tmpdir}/modelheadmask.mnc 2
-ImageMath 3 ${tmpdir}/extractmodel.mnc m ${REGISTRATIONMODEL} ${REGISTRATIONBRAINMASK}
 
 if [[ -s ${tmpdir}/template_bootstrap.xfm ]]; then
   cp -f ${tmpdir}/template_bootstrap.xfm ${tmpdir}/${n}/mni0_GenericAffine.xfm
@@ -804,40 +864,57 @@ else
               --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
 fi
 
+#Make a fov mask from all 1's of the
+minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression '1' ${REGISTRATIONMODEL} ${tmpdir}/modelfovmask.mnc
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelfovmask.mnc \
+  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
 
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
+ImageMath 3 ${tmpdir}/headmask.mnc m ${tmpdir}/headmask.mnc ${tmpdir}/fgmask.mnc
+cp -f ${tmpdir}/fgmask.mnc ${tmpdir}/fgmask_orig.mnc
 
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>0?(A[1]>0?2:0):(A[1]>0?1:0)' ${tmpdir}/headmask.mnc ${tmpdir}/${n}/weight3.mnc ${tmpdir}/${n}/weight4.mnc
+minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+  -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
+  ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/headmask.mnc ${tmpdir}/${n}/otsu.mnc
 
-#Always exclude 0 from correction
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "A[0]>1.01?1:0" ${input} ${tmpdir}/${n}/nonzero.mnc
-ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/nonzero.mnc
-outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/hotmask.mnc
-ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/hotmask.mnc
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc Otsu 4 ${tmpdir}/${n}/otsu.mnc
+ThresholdImage 3 ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight6.mnc 2 Inf 1 0
+
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc Otsu 4 ${tmpdir}/${n}/weight6.mnc
+ThresholdImage 3 ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight6.mnc 2 Inf 1 0
+
+iMath 3 ${tmpdir}/${n}/weight6.mnc ME ${tmpdir}/${n}/weight6.mnc 1 1 ball 1
+ImageMath 3 ${tmpdir}/${n}/weight6.mnc GetLargestComponent ${tmpdir}/${n}/weight6.mnc
+iMath 3 ${tmpdir}/${n}/weight6.mnc MD ${tmpdir}/${n}/weight6.mnc 1 1 ball 1
 
 #Use exclude mask if provided
 if [[ -n ${excludemask} ]]; then
-    ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${excludemask}
+    ImageMath 3 ${tmpdir}/${n}/weight6.mnc m ${tmpdir}/${n}/weight6.mnc ${excludemask}
 fi
 
-#Generate a whole-image mask to force N4 to always do correction over whole image
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1' ${input} ${tmpdir}/initmask.mnc
+N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 300x300x300x300,1e-4 ] \
+  -w ${tmpdir}/${n}/weight6.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
+  --histogram-sharpening [ 0.05,0.01,200 ] -r 0
 
-ImageMath 3 ${tmpdir}/${n}/weight4.mnc m ${tmpdir}/${n}/weight4.mnc ${tmpdir}/nonzero.mnc
+ImageMath 3 ${tmpdir}/${n}/prebias.mnc m ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias.mnc
+ImageMath 3 ${tmpdir}/${n}/prebias.mnc / ${tmpdir}/${n}/prebias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/prebias.mnc)
+ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
 
-do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/weight4.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 4 ${tmpdir}/headmask.mnc
+renorm ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight6.mnc usemask
+cp ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/corrected.mnc
 
 #Resample headmask into subject space, zero background and recrop
 ImageMath 3 ${input} PadImage ${input} 50
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/headmask.mnc -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
 ImageMath 3 ${input} m ${input} ${tmpdir}/headmask.mnc
 ExtractRegionFromImageByMask 3 ${input} ${tmpdir}/input.crop.mnc ${tmpdir}/headmask.mnc 1 10
 mv -f ${tmpdir}/input.crop.mnc ${input}
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelheadmask.mnc -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/headmask.mnc -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
 
-mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/bias_resample.mnc
-cp -f ${tmpdir}/prebias.mnc ${tmpdir}/prebias_orig.mnc
+cp -f ${tmpdir}/${n}/prebias.mnc ${tmpdir}/bias_orig.mnc
+
+mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias_resample.mnc
+cp -f ${tmpdir}/${n}/prebias.mnc ${tmpdir}/prebias.mnc
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/prebias.mnc ${tmpdir}/prebias_resample.mnc
 mv -f ${tmpdir}/${n}/bias_resample.mnc ${tmpdir}/${n}/bias.mnc
 mv -f ${tmpdir}/prebias_resample.mnc ${tmpdir}/prebias.mnc
@@ -962,6 +1039,8 @@ fi
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc GetLargestComponent ${tmpdir}/${n}/weight.mnc
 
+ImageMath 3 ${tmpdir}/${n}/classify.mnc m ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/mask2.mnc
+
 #Always exclude 0 from correction
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression 'A[0]>1.01?1:0' ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/nonzero.mnc
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/nonzero.mnc
@@ -969,6 +1048,7 @@ ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/nonz
 
 do_N4_correct ${input} ${tmpdir}/initmask.mnc ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/bias.mnc 2 ${tmpdir}/${n}/classify.mnc
 
+#Calculate coeffcient of variation between this round bias field and prior round
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -zero -expression 'A[0]/A[1]' ${tmpdir}/$((n - 1))/bias.mnc ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/ratio.mnc
 python -c "print(float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -stddev ${tmpdir}/${n}/ratio.mnc)\") / float(\"$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -mean ${tmpdir}/${n}/ratio.mnc)\"))" >>${tmpdir}/convergence.txt
 
@@ -1132,6 +1212,7 @@ while true; do
     ImageMath 3 ${tmpdir}/${n}/outlier_wm.mnc GetLargestComponent ${tmpdir}/${n}/outlier_wm.mnc
     outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/outlier_wm.mnc ${tmpdir}/${n}/hotmask.mnc
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
+
     #Do an initial classification using the last round posteriors, remove outliers
     Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
         -i PriorProbabilityImages[ 3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,0.5 ] -k Gaussian -m [ 0.1,1x1x1 ] \
@@ -1198,15 +1279,30 @@ if [[ ${_arg_autocrop} == "on" ]]; then
     ImageMath 3 ${originput} m ${originput} ${tmpdir}/finalheadmask.mnc
     ExtractRegionFromImageByMask 3 ${originput} ${tmpdir}/originput.crop.mnc ${tmpdir}/finalheadmask.mnc 1 10
     mv -f ${tmpdir}/originput.crop.mnc ${originput}
+    antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} -i ${tmpdir}/headmask.mnc \
+      -o ${tmpdir}/headmask.mnc -n GenericLabel
+   cp -f ${tmpdir}/headmask.mnc ${tmpdir}/fgmask.mnc
+else
+    antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} -i ${tmpdir}/fgmask_orig.mnc \
+      -o ${tmpdir}/fgmask.mnc -n GenericLabel
+    ImageMath 3 ${originput} m ${originput} ${tmpdir}/fgmask.mnc
 fi
 
 #Resample final results into original space and correct original input file
-
 n4input=${originput}
 n4corrected=${tmpdir}/corrected.mnc
 n4classifymask=${tmpdir}/finalclassify.mnc
 
-mincresample -like ${originput} ${tmpdir}/${n}/bias.mnc ${tmpdir}/finalbias.mnc -fill -fillvalue 1
+#Reconstruct a final bias field
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} \
+  -n BSpline[5] -i ${tmpdir}/${n}/bias.mnc -o ${tmpdir}/finalbias.mnc
+
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} \
+  -n BSpline[5] -i ${tmpdir}/bias_orig.mnc -o ${tmpdir}/bias_orig.mnc
+
+ImageMath 3 ${tmpdir}/finalbias.mnc addtozero ${tmpdir}/finalbias.mnc ${tmpdir}/bias_orig.mnc
+ImageMath 3 ${tmpdir}/finalbias.mnc addtozero ${tmpdir}/finalbias.mnc 1
+
 ImageMath 3 ${n4corrected} / ${originput} ${tmpdir}/finalbias.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o ${tmpdir}/finalmask.mnc -r ${n4corrected} -n GenericLabel
@@ -1215,32 +1311,15 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${n4corrected} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/finalclassify.mnc -r ${n4corrected} -n GenericLabel
 
-ThresholdImage 3 ${tmpdir}/finalclassify.mnc ${tmpdir}/finalclass3.mnc 3 3 1 0
-ThresholdImage 3 ${tmpdir}/finalclassify.mnc ${tmpdir}/finalclass1.mnc 1 1 1 0
-iMath 3 ${tmpdir}/finalclass3.mnc ME ${tmpdir}/finalclass3.mnc 1 1 ball 1
-iMath 3 ${tmpdir}/finalclass1.mnc ME ${tmpdir}/finalclass1.mnc 1 1 ball 1
-ImageMath 3 ${tmpdir}/finalclass3.mnc GetLargestComponent ${tmpdir}/finalclass3.mnc
+valuelow=$(mincstats -quiet -mask ${tmpdir}/fgmask.mnc -mask_binvalue 1 -pctT 0.1 ${n4corrected})
+valuewm=$(mincstats -quiet -median -mask ${n4classifymask} -mask_binvalue 3 ${n4corrected})
+valuegm=$(mincstats -quiet -median -mask ${n4classifymask} -mask_binvalue 2 ${n4corrected})
+valuehigh=$(mincstats -quiet -mask ${tmpdir}/fgmask.mnc -mask_binvalue 1 -pctT 99.9 ${n4corrected})
 
-npoints3=$(mincstats -quiet -count -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${n4corrected})
-npoints1=$(mincstats -quiet -count -mask ${tmpdir}/finalclass1.mnc -mask_binvalue 1 ${n4corrected})
+mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
 
-min=$(mincstats -quiet -min -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${n4corrected})
-max=$(mincstats -quiet -max -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${n4corrected})
-pct25=$(mincstats -quiet -pctT 25 -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${n4corrected})
-pct75=$(mincstats -quiet -pctT 75 -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 ${n4corrected})
-histbins3=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints3})**(-1.0/3.0)) ))")
-
-min=$(mincstats -quiet -min -mask ${tmpdir}/finalclass1.mnc -mask_binvalue 1 ${n4corrected})
-max=$(mincstats -quiet -max -mask ${tmpdir}/finalclass1.mnc -mask_binvalue 1 ${n4corrected})
-pct25=$(mincstats -quiet -pctT 25 -mask ${tmpdir}/finalclass1.mnc -mask_binvalue 1 ${n4corrected})
-pct75=$(mincstats -quiet -pctT 75 -mask ${tmpdir}/finalclass1.mnc -mask_binvalue 1 ${n4corrected})
-histbins1=$(python -c "print( int((float(${max})-float(${min}))/(2.0 * (float(${pct75})-float(${pct25})) * float(${npoints1})**(-1.0/3.0)) ))")
-
-pctThigh=$(mincstats -quiet -mask ${tmpdir}/finalclass3.mnc -mask_binvalue 1 -pctT 99.99 -bins ${histbins3} ${n4corrected})
-pctTlow=$(mincstats -quiet -mask ${tmpdir}/finalclass1.mnc -mask_binvalue 1 -pctT 1 -bins ${histbins1} ${n4corrected})
-
-minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/${pctThigh}*65535,0,65535)" \
-    ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
+  ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
 
 mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 
