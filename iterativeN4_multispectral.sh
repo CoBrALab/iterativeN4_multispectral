@@ -891,11 +891,11 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc \
   ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 #BSpline[ 5 ] does weird things to intensity, clip back to positive range
-mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/${n}/mni.mnc) ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
 mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 
 #Shrink the MNI mask for the first intensity matching
-iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 5 1 ball 1
+iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 2 1 ball 1
 
 #Intensity normalize
 volume_pol ${N4_VERBOSE:+--verbose} --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
