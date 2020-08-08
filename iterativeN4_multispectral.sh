@@ -675,9 +675,13 @@ function test_templates() {
 ##########START OF SCRIPT#############
 #Forceably convert to MINC2, and clamp range to avoid negative numbers, rescale to 0-65535
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
-mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -quiet -max ${tmpdir}/originput.mnc) ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
+mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp \
+  -const2 $(mincstats -quiet -floor 1e-12 -pctT 0.1 ${tmpdir}/originput.mnc) \
+          $(mincstats -quiet -floor 1e-12 -pctT 99.9 ${tmpdir}/originput.mnc) \
+  ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
 ImageMath 3 ${tmpdir}/originput.clamp.mnc RescaleImage ${tmpdir}/originput.clamp.mnc 0 65535
-mincresample -like ${tmpdir}/originput.mnc -keep -unsigned -short ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.clamp.resample.mnc
+mincresample  -quiet ${N4_VERBOSE:+-verbose} -like ${tmpdir}/originput.mnc -keep -unsigned -short \
+  ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.clamp.resample.mnc
 mv -f ${tmpdir}/originput.clamp.resample.mnc ${tmpdir}/originput.mnc
 rm -f ${tmpdir}/originput.clamp.mnc
 originput=${tmpdir}/originput.mnc
