@@ -506,49 +506,109 @@ function make_qc() {
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
-        -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n Linear
+        -i ${tmpdir}/corrected.mnc -o ${tmpdir}/qc/corrected.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+    antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
+        -i ${tmpdir}/origqcref.mnc -o ${tmpdir}/qc/orig.mnc -r ${RESAMPLEMODEL} -n BSpline[5]
+    mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/corrected.mnc ${tmpdir}/qc/corrected.clamp.mnc
+    mv -f ${tmpdir}/qc/corrected.clamp.mnc ${tmpdir}/qc/corrected.mnc
+    mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/orig.mnc ${tmpdir}/qc/orig.clamp.mnc
+    mv -f ${tmpdir}/qc/orig.clamp.mnc ${tmpdir}/qc/orig.mnc
 
     mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} $(mincbbox -mincresample ${tmpdir}/qc/classify.mnc) ${tmpdir}/qc/classify.mnc ${tmpdir}/qc/label-crop.mnc
     minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression '1' ${tmpdir}/qc/label-crop.mnc ${tmpdir}/qc/bounding.mnc
 
     #Trasverse
-    create_verify_image -range_floor 0 ${tmpdir}/qc/t.rgb \
+    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_classify.rgb \
         -width 1920 -autocols 10 -autocol_planes t \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
-    create_verify_image -range_floor 0 ${tmpdir}/qc/t2.rgb \
+    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_corrected.rgb \
         -width 1920 -autocols 10 -autocol_planes t \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:spect
+        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
+
+    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_corrected_gray.rgb \
+        -width 1920 -autocols 10 -autocol_planes t \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
+
+    create_verify_image -range_floor 0 ${tmpdir}/qc/trans_orig.rgb \
+        -width 1920 -autocols 10 -autocol_planes t \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
 
     #Saggital
-    create_verify_image -range_floor 0 ${tmpdir}/qc/s.rgb \
+    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_classify.rgb \
         -width 1920 -autocols 10 -autocol_planes s \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
-    create_verify_image -range_floor 0 ${tmpdir}/qc/s2.rgb \
+    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_corrected.rgb \
         -width 1920 -autocols 10 -autocol_planes s \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:spect
+        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
+
+    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_corrected_gray.rgb \
+        -width 1920 -autocols 10 -autocol_planes s \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
+
+    create_verify_image -range_floor 0 ${tmpdir}/qc/sag_orig.rgb \
+        -width 1920 -autocols 10 -autocol_planes s \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
 
     #Coronal
-    create_verify_image -range_floor 0 ${tmpdir}/qc/c.rgb \
+    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_classify.rgb \
         -width 1920 -autocols 10 -autocol_planes c \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:gray \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535 \
         volume_overlay:${tmpdir}/qc/classify.mnc:0.4
 
-    create_verify_image -range_floor 0 ${tmpdir}/qc/c2.rgb \
+    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_corrected.rgb \
         -width 1920 -autocols 10 -autocol_planes c \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
-        -row ${tmpdir}/qc/corrected.mnc color:spect
+        -row ${tmpdir}/qc/corrected.mnc color:spect:0:65535
 
-    convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%"  -append -trim ${tmpdir}/qc/*.rgb $(dirname ${output})/$(basename ${output} .mnc).jpg
+    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_corrected_gray.rgb \
+        -width 1920 -autocols 10 -autocol_planes c \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/corrected.mnc color:gray:0:65535
 
+    create_verify_image -range_floor 0 ${tmpdir}/qc/cor_orig.rgb \
+        -width 1920 -autocols 10 -autocol_planes c \
+        -bounding_volume ${tmpdir}/qc/bounding.mnc \
+        -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
+
+    convert -background black -strip -append \
+      ${tmpdir}/qc/cor_corrected.rgb \
+      ${tmpdir}/qc/cor_classify.rgb \
+      ${tmpdir}/qc/sag_corrected.rgb \
+      ${tmpdir}/qc/sag_classify.rgb \
+      ${tmpdir}/qc/trans_corrected.rgb \
+      ${tmpdir}/qc/trans_classify.rgb \
+      ${tmpdir}/qc/corrected.mpc
+
+    convert -background black -strip -append \
+      ${tmpdir}/qc/cor_orig.rgb \
+      ${tmpdir}/qc/cor_corrected_gray.rgb \
+      ${tmpdir}/qc/sag_orig.rgb \
+      ${tmpdir}/qc/sag_corrected_gray.rgb \
+      ${tmpdir}/qc/trans_orig.rgb \
+      ${tmpdir}/qc/trans_corrected_gray.rgb \
+      ${tmpdir}/qc/orig.mpc
+
+    convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
+      ${tmpdir}/qc/corrected.mpc $(dirname ${output})/$(basename ${output} .mnc).jpg
+
+    if command -v img2webp; then
+        convert -background black ${tmpdir}/qc/corrected.mpc ${tmpdir}/qc/corrected.png
+        convert -background black ${tmpdir}/qc/orig.mpc ${tmpdir}/qc/orig.png
+        img2webp -d 750 -lossy -min_size ${tmpdir}/qc/corrected.png ${tmpdir}/qc/orig.png -o $(dirname ${output})/$(basename ${output} .mnc).webp || true
+    fi
 }
 
 function test_templates() {
@@ -622,6 +682,7 @@ mincresample -like ${tmpdir}/originput.mnc -keep -unsigned -short ${tmpdir}/orig
 mv -f ${tmpdir}/originput.clamp.resample.mnc ${tmpdir}/originput.mnc
 rm -f ${tmpdir}/originput.clamp.mnc
 originput=${tmpdir}/originput.mnc
+cp -f ${originput} ${tmpdir}/origqcref.mnc
 
 #Isotropize, and normalize intensity range, this is the file that will be processed in the pipeline
 isostep=1
