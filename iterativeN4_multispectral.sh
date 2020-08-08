@@ -685,8 +685,21 @@ originput=${tmpdir}/originput.mnc
 cp -f ${originput} ${tmpdir}/origqcref.mnc
 
 #Isotropize, and normalize intensity range, this is the file that will be processed in the pipeline
-isostep=1
-ResampleImage 3 ${originput} ${input} ${isostep}x${isostep}x${isostep} 0 4
+#Need smoothing for downsampling to avoid aliasing
+isostep=1.0
+inputres=$(python -c "print('\n'.join([str(abs(x)) for x in [float(x) for x in \"$(PrintHeader ${originput} 1)\".split(\"x\")]]))")
+blurs=""
+
+for dim in ${inputres}; do
+  if [[ $(python -c "print(${dim}>(${isostep}-1e-6))") == True ]]; then
+    blurs+=1e-12x
+  else
+    blurs+=$(python -c "import math; print(math.sqrt((1.0**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
+  fi
+done
+
+SmoothImage 3 ${originput} "${blurs%?}" ${tmpdir}/smoothed.mnc 1 0
+ResampleImage 3 ${tmpdir}/smoothed.mnc ${input} ${isostep}x${isostep}x${isostep} 0 4
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 $(mincstats -max -quiet ${input}) ${input} ${tmpdir}/input.clamp.mnc
 ImageMath 3 ${input} RescaleImage ${tmpdir}/input.clamp.mnc 0 65535
 rm -f ${tmpdir}/input.clamp.mnc
