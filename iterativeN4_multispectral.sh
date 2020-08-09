@@ -551,7 +551,6 @@ function iterative_precorrect() {
 
   done
 
-  ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
 
   pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
   pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
@@ -581,7 +580,6 @@ function classify_to_mask() {
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/bmask_E.mnc
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
 
-    ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/class3.mnc 3 3 1 0
 }
 
 function make_qc() {
@@ -1151,9 +1149,6 @@ classify_to_mask
 
 ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/classifymask.mnc
 
-#Generate outlier mask from white matter mask intensity
-ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
-ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
 
 
 #Combine GM and WM proabability images into a N4 mask,
@@ -1222,9 +1217,6 @@ while true; do
     classify_to_mask
     ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc
 
-    #Form a new mask from voting prior masks
-    ImageMath 3 ${tmpdir}/${n}/class3.mnc m ${tmpdir}/${n}/class3.mnc ${tmpdir}/${n}/mask2.mnc
-    ImageMath 3 ${tmpdir}/${n}/class3.mnc GetLargestComponent ${tmpdir}/${n}/class3.mnc
 
     #Combine GM and WM probably images into a N4 mask,
     ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
