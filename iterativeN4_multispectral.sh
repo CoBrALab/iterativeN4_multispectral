@@ -893,6 +893,7 @@ N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 300x300x300x
   -w ${tmpdir}/${n}/weight6.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
   --histogram-sharpening [ 0.05,0.01,200 ] -r 0
 
+ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
 ImageMath 3 ${tmpdir}/${n}/prebias.mnc m ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias.mnc
 ImageMath 3 ${tmpdir}/${n}/prebias.mnc / ${tmpdir}/${n}/prebias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/prebias.mnc)
 ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
