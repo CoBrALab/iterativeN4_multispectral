@@ -58,3 +58,17 @@ Finally, you can use ``--config auto`` for the pipeline to attempt to choose the
 This pipeline uses the priors available from the MNI at http://nist.mni.mcgill.ca/?page_id=714. The "ants" style priors
 are modified versions of https://figshare.com/articles/ANTs_ANTsR_Brain_Templates/915436 to work with this pipeline
 and available upon request.
+
+# Adding your own priors
+
+If you want to provide your own priors, the following files are required:
+- REGISTRATIONMODEL - the t1-weighted image
+- REGISTRATIONBRAINMASK - the brain mask
+- WMPRIOR - a probability map of white matter
+- GMPRIOR - a probability map of gray matter
+- CSFPRIOR - a probabiity map of CSF
+- (if your template is not in MNI space) MNI_XFM, an affine transform from your template to MNI space
+
+Generate a config file defining these variables and provide it to the ``--config`` option. You can put the config file
+into the ``auto`` directory to have it considered during auto template selection.
+
