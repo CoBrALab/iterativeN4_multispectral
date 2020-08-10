@@ -344,59 +344,59 @@ originput=${_arg_input}
 input=${tmpdir}/t1.mnc
 
 function outlier_mask() {
-  #Generate an outlier mask which combines the vessel segmentation and 99.5 percentile
-  local outlier_input=$1
-  local outlier_mask=$2
-  local outlier_output=$3
+    #Generate an outlier mask which combines the vessel segmentation >4.75 * MAD of WM
+    local outlier_input=$1
+    local outlier_mask=$2
+    local outlier_output=$3
 
-  local median
-  local mad
+    local median
+    local mad
 
-  median=$(mincstats -quiet -median -mask ${outlier_mask} -mask_binvalue 1 ${outlier_input})
+    median=$(mincstats -quiet -median -mask ${outlier_mask} -mask_binvalue 1 ${outlier_input})
 
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
-  mad=$(mincstats -quiet -median -mask ${outlier_mask} -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -expression "abs(A[0]-${median})" ${outlier_input} ${tmpdir}/${n}/madmap.mnc
+    mad=$(mincstats -quiet -median -mask ${outlier_mask} -mask_binvalue 1 ${tmpdir}/${n}/madmap.mnc)
 
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "(((0.6745*(A[0]-${median}))/${mad})<4.75)&&(A[1]<45)?1:0" \
-    ${outlier_input} ${tmpdir}/vessels.mnc ${outlier_output}
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression "(((0.6745*(A[0]-${median}))/${mad})<4.75)&&(A[1]<45)?1:0" \
+        ${outlier_input} ${tmpdir}/vessels.mnc ${outlier_output}
 
 }
 
 function renorm() {
-  #Renormalize image 0.1%-(GM/WM mean)-99.9% to 0-32767-65535 using a classification mask
-  #Compute the percentiles using the GM/WM mask
-  #Achieved via solving a linear system to get a 2nd order polynomial remapping
-  #of the intensity values
+    #Renormalize image 0.1%-(GM/WM mean)-99.9% to 0-32767-65535 using a classification mask
+    #Compute the percentiles using the GM/WM mask
+    #Achieved via solving a linear system to get a 2nd order polynomial remapping
+    #of the intensity values
 
-  local renorm_input=$1
-  local renorm_classification=$2
-  local usebrainmask="${3:-}"
+    local renorm_input=$1
+    local renorm_classification=$2
+    local usebrainmask="${3:-}"
 
-  local wmbinvalue
-  local gmbinvalue
+    local wmbinvalue
+    local gmbinvalue
 
-  if [[ -n ${usebrainmask} ]]; then
-      wmbinvalue=1
-      gmbinvalue=1
+    if [[ -n ${usebrainmask} ]]; then
+        wmbinvalue=1
+        gmbinvalue=1
     else
-      wmbinvalue=3
-      gmbinvalue=2
-  fi
+        wmbinvalue=3
+        gmbinvalue=2
+    fi
 
-  #Compute the percentiles and median values of GM and WM
-  valuelow=$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 1 ${renorm_input})
-  valuewm=$(mincstats -quiet -median -mask ${renorm_classification} -mask_binvalue ${wmbinvalue} ${renorm_input})
-  valuegm=$(mincstats -quiet -median -mask ${renorm_classification} -mask_binvalue ${gmbinvalue} ${renorm_input})
-  valuehigh=$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 99 ${renorm_input})
+    #Compute the percentiles and median values of GM and WM
+    valuelow=$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 1 ${renorm_input})
+    valuewm=$(mincstats -quiet -median -mask ${renorm_classification} -mask_binvalue ${wmbinvalue} ${renorm_input})
+    valuegm=$(mincstats -quiet -median -mask ${renorm_classification} -mask_binvalue ${gmbinvalue} ${renorm_input})
+    valuehigh=$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 99 ${renorm_input})
 
-  #Solve the linear system of a quadratic polynomial mapping the input values to 0-32767-65535
-  mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
+    #Solve the linear system of a quadratic polynomial mapping the input values to 0-32767-65535
+    mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
 
-  #Apply the mpapping
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
-    ${renorm_input} $(dirname ${renorm_input})/$(basename ${renorm_input} .mnc).norm.mnc
+    #Apply the mpapping
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
+        ${renorm_input} $(dirname ${renorm_input})/$(basename ${renorm_input} .mnc).norm.mnc
 
-  mv -f $(dirname ${renorm_input})/$(basename ${renorm_input} .mnc).norm.mnc ${renorm_input}
+    mv -f $(dirname ${renorm_input})/$(basename ${renorm_input} .mnc).norm.mnc ${renorm_input}
 }
 
 #Function used to do bias field correction
@@ -428,141 +428,145 @@ function do_N4_correct() {
 
 function iterative_precorrect() {
 
-  local pctTlow
-  local pctThigh
+    local pctTlow
+    local pctThigh
 
-  #Foreground/background via multi-level otsu
-  ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight1.mnc Otsu 4 ${tmpdir}/nonzero.mnc
-  ThresholdImage 3 ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/weight1.mnc 2 Inf 1 0
-  ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
-  iMath 3 ${tmpdir}/${n}/weight1.mnc MC ${tmpdir}/${n}/weight1.mnc 2 1 ball 1
-  ImageMath 3 ${tmpdir}/${n}/weight1.mnc FillHoles ${tmpdir}/${n}/weight1.mnc 2
-  cp -f ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/mask1.mnc
-  ImageMath 3 ${tmpdir}/${n}/weight1.mnc m ${tmpdir}/${n}/weight1.mnc ${tmpdir}/nonzero.mnc
-  ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
+    #Foreground/background via multi-level otsu
+    ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight1.mnc Otsu 4 ${tmpdir}/nonzero.mnc
+    ThresholdImage 3 ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/weight1.mnc 2 Inf 1 0
+    ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
+    iMath 3 ${tmpdir}/${n}/weight1.mnc MC ${tmpdir}/${n}/weight1.mnc 2 1 ball 1
+    ImageMath 3 ${tmpdir}/${n}/weight1.mnc FillHoles ${tmpdir}/${n}/weight1.mnc 2
+    cp -f ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/mask1.mnc
+    ImageMath 3 ${tmpdir}/${n}/weight1.mnc m ${tmpdir}/${n}/weight1.mnc ${tmpdir}/nonzero.mnc
+    ImageMath 3 ${tmpdir}/${n}/weight1.mnc GetLargestComponent ${tmpdir}/${n}/weight1.mnc
 
-  #Exclude Hotspots
-  minccalc -quiet ${N4_VERBOSE:+-verbose} \
-    -expression "A[0]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)?A[1]:0" \
-    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/weighttemp.mnc
-  mv -f ${tmpdir}/${n}/weighttemp.mnc ${tmpdir}/${n}/weight1.mnc
+    #Exclude Hotspots
+    minccalc -quiet ${N4_VERBOSE:+-verbose} \
+        -expression "A[0]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)?A[1]:0" \
+        ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight1.mnc ${tmpdir}/${n}/weighttemp.mnc
+    mv -f ${tmpdir}/${n}/weighttemp.mnc ${tmpdir}/${n}/weight1.mnc
 
-  N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 50x50x50x50,0 ] \
-    -w ${tmpdir}/${n}/weight1.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 4 --verbose \
-    --histogram-sharpening [ 0.15,0.01,200 ]
+    #First round of correction
+    N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 50x50x50x50,0 ] \
+        -w ${tmpdir}/${n}/weight1.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 4 --verbose \
+        --histogram-sharpening [ 0.15,0.01,200 ] -r 0 -x ${tmpdir}/initmask.mnc
 
-  ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc \
-    $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
-  ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/bias.mnc
+    ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc \
+        $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
+    ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/bias.mnc
 
-  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
-  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
-  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
-    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
-  mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
-
-  #Second round Foreground/background via multi-level otsu
-  ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight2.mnc Otsu 4 ${tmpdir}/nonzero.mnc
-  ThresholdImage 3 ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight2.mnc 2 Inf 1 0
-  ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
-  iMath 3 ${tmpdir}/${n}/weight2.mnc MC ${tmpdir}/${n}/weight2.mnc 3 1 ball 1
-  ImageMath 3 ${tmpdir}/${n}/weight2.mnc FillHoles ${tmpdir}/${n}/weight2.mnc 2
-  cp -f ${tmpdir}/${n}/weight2.mnc  ${tmpdir}/${n}/mask2.mnc
-  cp -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/fgmask.mnc
-  ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/nonzero.mnc
-  ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
-
-  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 0.1 ${input})
-  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.9 ${input})
-  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
-    ${input} ${tmpdir}/${n}/t1.mnc
-  cp ${tmpdir}/${n}/t1.mnc ${tmpdir}/t1.renorm.mnc
-  input=${tmpdir}/t1.renorm.mnc
-
-  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
-  ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/nonzero.mnc
-
-  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
-    -expression "A[0]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc)?A[1]:0" \
-    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weighttemp.mnc
-  mv -f ${tmpdir}/${n}/weighttemp.mnc ${tmpdir}/${n}/weight2.mnc
-
-  N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 50x50x50x50,0 ] \
-    -w ${tmpdir}/${n}/weight2.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 4 --verbose \
-    --histogram-sharpening [ 0.15,0.01,200 ]
-
-  ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc \
-    $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
-  ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/bias.mnc
-
-  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
-  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
-  minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
-    ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
-  mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
-
-  cp -f ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/prebias.mnc
-
-  itk_vesselness --scales 8 --rescale ${tmpdir}/${n}/t1.mnc ${tmpdir}/vessels.mnc
-
-  i=0
-
-  while true; do
-
-    ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc Otsu 4 ${tmpdir}/${n}/mask$((2 + i)).mnc
-    ThresholdImage 3 ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/otsu.mnc 2 Inf 1 0
-
-    ImageMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc GetLargestComponent ${tmpdir}/${n}/otsu.mnc
-    iMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc MC ${tmpdir}/${n}/mask$((3 + i)).mnc 8 1 ball 1
-    ImageMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc FillHoles ${tmpdir}/${n}/mask$((3 + i)).mnc 2
-    cp -f ${tmpdir}/${n}/mask$((3 + i)).mnc ${tmpdir}/fgmask.mnc
-
-    if [[ $i == 0 ]]; then
-      ImageMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc + ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/mask$((2 + i)).mnc
-      minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
-        -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
-        ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight$((3 + i)).mnc
-    else
-      minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
-        -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
-        ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight$((3 + i)).mnc
-      iMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc ME ${tmpdir}/${n}/otsu.mnc 1 1 ball 1
-      ImageMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc GetLargestComponent ${tmpdir}/${n}/weight$((3 + i)).mnc
-      iMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc MD ${tmpdir}/${n}/weight$((3 + i)).mnc 1 1 ball 1
-    fi
-
-    N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 300x300x300x300,1e-4 ] \
-      -w ${tmpdir}/${n}/weight$((3 + i)).mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
-      --histogram-sharpening [ 0.05,0.01,200 ] -r 0
-
-    ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
-    ImageMath 3 ${tmpdir}/${n}/prebias.mnc m ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias.mnc
-    ImageMath 3 ${tmpdir}/${n}/prebias.mnc / ${tmpdir}/${n}/prebias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/prebias.mnc)
-    ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
-
-    ((++i))
-    [[ ( ${i} -le 2 ) ]] || break
-
-    pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
-    pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+    #Renormalize intensity
+    pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+    pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask1.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
     minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
-      ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
+        ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
     mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
 
-  done
+    #Second round Foreground/background via multi-level otsu
+    ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight2.mnc Otsu 4 ${tmpdir}/nonzero.mnc
+    ThresholdImage 3 ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weight2.mnc 2 Inf 1 0
+    ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
+    iMath 3 ${tmpdir}/${n}/weight2.mnc MC ${tmpdir}/${n}/weight2.mnc 3 1 ball 1
+    ImageMath 3 ${tmpdir}/${n}/weight2.mnc FillHoles ${tmpdir}/${n}/weight2.mnc 2
+    cp -f ${tmpdir}/${n}/weight2.mnc  ${tmpdir}/${n}/mask2.mnc
+    cp -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/fgmask.mnc
+    ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/nonzero.mnc
+    ImageMath 3 ${tmpdir}/${n}/weight2.mnc GetLargestComponent ${tmpdir}/${n}/weight2.mnc
 
+    pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 0.1 ${input})
+    pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.9 ${input})
+    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+        ${input} ${tmpdir}/${n}/t1.mnc
+    cp ${tmpdir}/${n}/t1.mnc ${tmpdir}/t1.renorm.mnc
+    input=${tmpdir}/t1.renorm.mnc
 
-  pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
-  pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
-  minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
-      ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/corrected.mnc
+    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
+    ImageMath 3 ${tmpdir}/${n}/weight2.mnc m ${tmpdir}/${n}/weight2.mnc ${tmpdir}/nonzero.mnc
 
-  minc_anlm ${N4_VERBOSE:+--verbose} --clobber --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/t1.mnc
+    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+        -expression "A[0]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc)?A[1]:0" \
+        ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/weight2.mnc ${tmpdir}/${n}/weighttemp.mnc
+    mv -f ${tmpdir}/${n}/weighttemp.mnc ${tmpdir}/${n}/weight2.mnc
+
+    N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 50x50x50x50,0 ] \
+        -w ${tmpdir}/${n}/weight2.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 4 --verbose \
+        --histogram-sharpening [ 0.15,0.01,200 ] -r 0 -x ${tmpdir}/initmask.mnc
+
+    ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc \
+        $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
+    ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/bias.mnc
+
+    pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+    pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask2.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+    minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+        ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
+    mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
+
+    cp -f ${tmpdir}/${n}/bias.mnc ${tmpdir}/${n}/prebias.mnc
+
+    itk_vesselness --scales 8 --rescale ${tmpdir}/${n}/t1.mnc ${tmpdir}/vessels.mnc
+
+    i=0
+
+    #Iterative correction using tissue masking, some badly biased scans can't be
+    #corrected in one-shot
+    while true; do
+
+        ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc Otsu 4 ${tmpdir}/${n}/mask$((2 + i)).mnc
+        ThresholdImage 3 ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/otsu.mnc 2 Inf 1 0
+
+        ImageMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc GetLargestComponent ${tmpdir}/${n}/otsu.mnc
+        iMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc MC ${tmpdir}/${n}/mask$((3 + i)).mnc 8 1 ball 1
+        ImageMath 3 ${tmpdir}/${n}/mask$((3 + i)).mnc FillHoles ${tmpdir}/${n}/mask$((3 + i)).mnc 2
+        cp -f ${tmpdir}/${n}/mask$((3 + i)).mnc ${tmpdir}/fgmask.mnc
+
+        if [[ $i == 0 ]]; then
+            ImageMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc + ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/mask$((2 + i)).mnc
+            minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+                -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
+                ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight$((3 + i)).mnc
+        else
+            minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
+                -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
+                ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight$((3 + i)).mnc
+            iMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc ME ${tmpdir}/${n}/otsu.mnc 1 1 ball 1
+            ImageMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc GetLargestComponent ${tmpdir}/${n}/weight$((3 + i)).mnc
+            iMath 3 ${tmpdir}/${n}/weight$((3 + i)).mnc MD ${tmpdir}/${n}/weight$((3 + i)).mnc 1 1 ball 1
+        fi
+
+        N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 300x300x300x300,1e-4 ] \
+            -w ${tmpdir}/${n}/weight$((3 + i)).mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
+            --histogram-sharpening [ 0.05,0.01,200 ] -r 0 -x ${tmpdir}/initmask.mnc
+
+        ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
+        ImageMath 3 ${tmpdir}/${n}/prebias.mnc m ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias.mnc
+        ImageMath 3 ${tmpdir}/${n}/prebias.mnc / ${tmpdir}/${n}/prebias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/prebias.mnc)
+        ImageMath 3 ${tmpdir}/${n}/t1.mnc / ${input} ${tmpdir}/${n}/prebias.mnc
+
+        ((++i))
+        [[ ( ${i} -le 2 ) ]] || break
+
+        pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+        pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask$((2 + i)).mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+        minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+            ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/t1.norm.mnc
+        mv -f ${tmpdir}/${n}/t1.norm.mnc ${tmpdir}/${n}/t1.mnc
+
+    done
+
+    pctThigh=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 99.9 ${tmpdir}/${n}/t1.mnc)
+    pctTlow=$(mincstats -quiet -mask ${tmpdir}/${n}/mask5.mnc -mask_binvalue 1 -pctT 0.1 ${tmpdir}/${n}/t1.mnc)
+    minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(clamp(A[0]-${pctTlow},0,65535)/(${pctThigh}-${pctTlow})*65535,0,65535)" \
+        ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/corrected.mnc
+
+    minc_anlm ${N4_VERBOSE:+--verbose} --clobber --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/${n}/corrected.mnc ${tmpdir}/${n}/t1.mnc
 }
 
-#Convert classify image into a mask
-#Mostly a clone of the supersteps of the antsBrainExtraction supersteps
+
 function classify_to_mask() {
+    #Convert classify image into a mask
+    #Mostly a clone of the supersteps of the antsBrainExtraction supersteps
     ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/gm.mnc 2 2 1 0
     ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/wm.mnc 3 3 1 0
 
@@ -579,13 +583,14 @@ function classify_to_mask() {
     iMath 3 ${tmpdir}/bmask_E.mnc ME ${tmpdir}/masks/mnimask.mnc 10 1 ball 1
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/bmask_E.mnc
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
-
 }
 
 function make_qc() {
     #Generate a standardized view of the final correct brain in MNI space, with classification overlayed
+    #Create animated version if img2webp is available
     mkdir -p ${tmpdir}/qc
 
+    #Resample into MNI space for all the inputs
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
         -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/qc/classify.mnc -r ${RESAMPLEMODEL} -n GenericLabel
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/mni0_GenericAffine.xfm \
@@ -597,6 +602,7 @@ function make_qc() {
     mincmath -clobber -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/qc/orig.mnc ${tmpdir}/qc/orig.clamp.mnc
     mv -f ${tmpdir}/qc/orig.clamp.mnc ${tmpdir}/qc/orig.mnc
 
+    #Create the bounding box for create_verify_image
     mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} $(mincbbox -mincresample ${tmpdir}/qc/classify.mnc) ${tmpdir}/qc/classify.mnc ${tmpdir}/qc/label-crop.mnc
     minccalc -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression '1' ${tmpdir}/qc/label-crop.mnc ${tmpdir}/qc/bounding.mnc
 
@@ -622,7 +628,7 @@ function make_qc() {
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
         -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
 
-    #Saggital
+    #Sagital
     create_verify_image -range_floor 0 ${tmpdir}/qc/sag_classify.rgb \
         -width 1920 -autocols 10 -autocol_planes s \
         -bounding_volume ${tmpdir}/qc/bounding.mnc \
@@ -667,26 +673,28 @@ function make_qc() {
         -row ${tmpdir}/qc/orig.mnc color:spect:0:65535
 
     convert -background black -strip -append \
-      ${tmpdir}/qc/cor_corrected.rgb \
-      ${tmpdir}/qc/cor_classify.rgb \
-      ${tmpdir}/qc/sag_corrected.rgb \
-      ${tmpdir}/qc/sag_classify.rgb \
-      ${tmpdir}/qc/trans_corrected.rgb \
-      ${tmpdir}/qc/trans_classify.rgb \
-      ${tmpdir}/qc/corrected.mpc
+        ${tmpdir}/qc/cor_corrected.rgb \
+        ${tmpdir}/qc/cor_classify.rgb \
+        ${tmpdir}/qc/sag_corrected.rgb \
+        ${tmpdir}/qc/sag_classify.rgb \
+        ${tmpdir}/qc/trans_corrected.rgb \
+        ${tmpdir}/qc/trans_classify.rgb \
+        ${tmpdir}/qc/corrected.mpc
 
     convert -background black -strip -append \
-      ${tmpdir}/qc/cor_orig.rgb \
-      ${tmpdir}/qc/cor_corrected_gray.rgb \
-      ${tmpdir}/qc/sag_orig.rgb \
-      ${tmpdir}/qc/sag_corrected_gray.rgb \
-      ${tmpdir}/qc/trans_orig.rgb \
-      ${tmpdir}/qc/trans_corrected_gray.rgb \
-      ${tmpdir}/qc/orig.mpc
+        ${tmpdir}/qc/cor_orig.rgb \
+        ${tmpdir}/qc/cor_corrected_gray.rgb \
+        ${tmpdir}/qc/sag_orig.rgb \
+        ${tmpdir}/qc/sag_corrected_gray.rgb \
+        ${tmpdir}/qc/trans_orig.rgb \
+        ${tmpdir}/qc/trans_corrected_gray.rgb \
+        ${tmpdir}/qc/orig.mpc
 
+    #Save static QC jpg
     convert -background black -strip -interlace Plane -sampling-factor 4:2:0 -quality "85%" \
-      ${tmpdir}/qc/corrected.mpc $(dirname ${output})/$(basename ${output} .mnc).jpg
+        ${tmpdir}/qc/corrected.mpc $(dirname ${output})/$(basename ${output} .mnc).jpg
 
+    #If webp software is available animate a before/after image
     if command -v img2webp; then
         convert -background black ${tmpdir}/qc/corrected.mpc ${tmpdir}/qc/corrected.png
         convert -background black ${tmpdir}/qc/orig.mpc ${tmpdir}/qc/orig.png
@@ -696,7 +704,7 @@ function make_qc() {
 
 function test_templates() {
     #Automatic template selection for most similar template for use as prior
-    #Loop over the configs/auto config files and choose the best one based on CC
+    #Loop over the configs/auto config files and choose the best one based on ants CC
     mkdir -p ${tmpdir}/test_templates
 
     for configfile in $(dirname "$(readlink -f "$0")")/configs/auto/*cfg; do
@@ -708,35 +716,35 @@ function test_templates() {
             --use-histogram-matching 1 \
             --initial-moving-transform [ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1 ] \
             --transform Translation[ 0.1 ] \
-                    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-                    --convergence [ 500x500x500x500x500x500x500x500,1e-6,10 ] \
-                    --shrink-factors 6x6x6x6x6x6x6x6 \
-                    --smoothing-sigmas 6.35574237559x5.93006674681x5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994mm \
-                    --masks [ NOMASK,NOMASK ] \
+            --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+            --convergence [ 500x500x500x500x500x500x500x500,1e-6,10 ] \
+            --shrink-factors 6x6x6x6x6x6x6x6 \
+            --smoothing-sigmas 6.35574237559x5.93006674681x5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994mm \
+            --masks [ NOMASK,NOMASK ] \
             --transform Rigid[ 0.1 ] \
-                    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-                    --convergence [ 500x500x500x500x500x500x500,1e-6,10 ] \
-                    --shrink-factors 6x6x6x6x6x6x5 \
-                    --smoothing-sigmas 4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813mm \
-                    --masks [ NOMASK,NOMASK ] \
+            --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+            --convergence [ 500x500x500x500x500x500x500,1e-6,10 ] \
+            --shrink-factors 6x6x6x6x6x6x5 \
+            --smoothing-sigmas 4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813mm \
+            --masks [ NOMASK,NOMASK ] \
             --transform Similarity[ 0.1 ] \
-                    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-                    --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
-                    --shrink-factors 6x6x5x4x3x2 \
-                    --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
-                    --masks [ NOMASK,NOMASK ] \
+            --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+            --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
+            --shrink-factors 6x6x5x4x3x2 \
+            --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
+            --masks [ NOMASK,NOMASK ] \
             --transform Similarity[ 0.1 ] \
-                    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-                    --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
-                    --shrink-factors 6x6x5x4x3x2 \
-                    --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
-                    --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
+            --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+            --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
+            --shrink-factors 6x6x5x4x3x2 \
+            --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
+            --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
             --transform Affine[ 0.1 ] \
-                    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
-                    --convergence [ 500x450x150x50,1e-6,10 ] \
-                    --shrink-factors 4x3x2x1 \
-                    --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
-                    --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
+            --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+            --convergence [ 500x450x150x50,1e-6,10 ] \
+            --shrink-factors 4x3x2x1 \
+            --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
+            --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
 
         echo ${configfile},$(MeasureImageSimilarity -d 3 -m CC[${REGISTRATIONMODEL},${tmpdir}/test_templates/$(basename ${configfile} .cfg).mnc,1,4] \
             -x ${REGISTRATIONBRAINMASK}) >> ${tmpdir}/test_templates/results.csv
@@ -759,12 +767,12 @@ function test_templates() {
 #Forceably convert to MINC2, and clamp range to avoid negative numbers, rescale to 0-65535
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp \
-  -const2 $(mincstats -quiet -floor 1e-12 -pctT 0.1 ${tmpdir}/originput.mnc) \
-          $(mincstats -quiet -floor 1e-12 -pctT 99.9 ${tmpdir}/originput.mnc) \
-  ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
+    -const2 $(mincstats -quiet -floor 1e-12 -pctT 0.1 ${tmpdir}/originput.mnc) \
+    $(mincstats -quiet -floor 1e-12 -pctT 99.9 ${tmpdir}/originput.mnc) \
+    ${tmpdir}/originput.mnc ${tmpdir}/originput.clamp.mnc
 ImageMath 3 ${tmpdir}/originput.clamp.mnc RescaleImage ${tmpdir}/originput.clamp.mnc 0 65535
 mincresample  -quiet ${N4_VERBOSE:+-verbose} -like ${tmpdir}/originput.mnc -keep -unsigned -short \
-  ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.clamp.resample.mnc
+    ${tmpdir}/originput.clamp.mnc ${tmpdir}/originput.clamp.resample.mnc
 mv -f ${tmpdir}/originput.clamp.resample.mnc ${tmpdir}/originput.mnc
 rm -f ${tmpdir}/originput.clamp.mnc
 originput=${tmpdir}/originput.mnc
@@ -772,16 +780,17 @@ cp -f ${originput} ${tmpdir}/origqcref.mnc
 
 #Isotropize, and normalize intensity range, this is the file that will be processed in the pipeline
 #Need smoothing for downsampling to avoid aliasing
+#Ideas stolen from https://discourse.itk.org/t/resampling-to-isotropic-signal-processing-theory/1403
 isostep=1.0
 inputres=$(python -c "print('\n'.join([str(abs(x)) for x in [float(x) for x in \"$(PrintHeader ${originput} 1)\".split(\"x\")]]))")
 blurs=""
 
 for dim in ${inputres}; do
-  if [[ $(python -c "print(${dim}>(${isostep}-1e-6))") == True ]]; then
-    blurs+=1e-12x
-  else
-    blurs+=$(python -c "import math; print(math.sqrt((1.0**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
-  fi
+    if [[ $(python -c "print(${dim}>(${isostep}-1e-6))") == True ]]; then
+        blurs+=1e-12x
+    else
+        blurs+=$(python -c "import math; print(math.sqrt((1.0**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
+    fi
 done
 
 SmoothImage 3 ${originput} "${blurs%?}" ${tmpdir}/smoothed.mnc 1 0
@@ -794,7 +803,7 @@ ImageMath 3 ${input} PadImage ${input} 20
 #Generate a global nonzero mask to always exclude pure background
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
 
-#If lesion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
+#If exclusion mask exists, negate it to produce a multiplicative exlcusion mask, resample to internal resolution
 if [[ -n ${_arg_exclude} ]]; then
     ImageMath 3 ${tmpdir}/exclude.mnc Neg ${_arg_exclude}
     excludemask=${tmpdir}/exclude.mnc
@@ -825,56 +834,58 @@ if [[ ${_arg_config} == "auto" ]]; then
     test_templates
 fi
 
+#Register to model to resample back a FOV mask
 if [[ -s ${tmpdir}/template_bootstrap.xfm ]]; then
-  cp -f ${tmpdir}/template_bootstrap.xfm ${tmpdir}/${n}/mni0_GenericAffine.xfm
+    cp -f ${tmpdir}/template_bootstrap.xfm ${tmpdir}/${n}/mni0_GenericAffine.xfm
 else
-  antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
-      --output [ ${tmpdir}/${n}/mni ] \
-      --use-histogram-matching 1 \
-      --initial-moving-transform [ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1 ] \
-      --transform Translation[ 0.1 ] \
-              --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-              --convergence [ 500x500x500x500x500x500x500x500,1e-6,10 ] \
-              --shrink-factors 6x6x6x6x6x6x6x6 \
-              --smoothing-sigmas 6.35574237559x5.93006674681x5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994mm \
-              --masks [ NOMASK,NOMASK ] \
-      --transform Rigid[ 0.1 ] \
-              --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-              --convergence [ 500x500x500x500x500x500x500,1e-6,10 ] \
-              --shrink-factors 6x6x6x6x6x6x5 \
-              --smoothing-sigmas 4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813mm \
-              --masks [ NOMASK,NOMASK ] \
-      --transform Similarity[ 0.1 ] \
-              --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-              --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
-              --shrink-factors 6x6x5x4x3x2 \
-              --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
-              --masks [ NOMASK,NOMASK ] \
-      --transform Similarity[ 0.1 ] \
-              --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-              --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
-              --shrink-factors 6x6x5x4x3x2 \
-              --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
-              --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
-      --transform Affine[ 0.1 ] \
-              --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
-              --convergence [ 500x450x150x0,1e-6,10 ] \
-              --shrink-factors 4x3x2x1 \
-              --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
-              --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
+    antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
+        --output [ ${tmpdir}/${n}/mni ] \
+        --use-histogram-matching 1 \
+        --initial-moving-transform [ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1 ] \
+        --transform Translation[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+        --convergence [ 500x500x500x500x500x500x500x500,1e-6,10 ] \
+        --shrink-factors 6x6x6x6x6x6x6x6 \
+        --smoothing-sigmas 6.35574237559x5.93006674681x5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994mm \
+        --masks [ NOMASK,NOMASK ] \
+        --transform Rigid[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+        --convergence [ 500x500x500x500x500x500x500,1e-6,10 ] \
+        --shrink-factors 6x6x6x6x6x6x5 \
+        --smoothing-sigmas 4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813mm \
+        --masks [ NOMASK,NOMASK ] \
+        --transform Similarity[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+        --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
+        --shrink-factors 6x6x5x4x3x2 \
+        --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
+        --masks [ NOMASK,NOMASK ] \
+        --transform Similarity[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+        --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
+        --shrink-factors 6x6x5x4x3x2 \
+        --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
+        --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
+        --transform Affine[ 0.1 ] \
+        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+        --convergence [ 500x450x150x0,1e-6,10 ] \
+        --shrink-factors 4x3x2x1 \
+        --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
+        --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
 fi
 
 #Make a fov mask from all 1's of the
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression '1' ${REGISTRATIONMODEL} ${tmpdir}/modelfovmask.mnc
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/modelfovmask.mnc \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -o ${tmpdir}/headmask.mnc -r ${tmpdir}/${n}/t1.mnc -n GenericLabel
 
+#Headmask is intersection of filled otsu foreground mask and FOV from model
 ImageMath 3 ${tmpdir}/headmask.mnc m ${tmpdir}/headmask.mnc ${tmpdir}/fgmask.mnc
 cp -f ${tmpdir}/fgmask.mnc ${tmpdir}/fgmask_orig.mnc
 
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} \
-  -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
-  ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/headmask.mnc ${tmpdir}/${n}/otsu.mnc
+    -expression "(A[0]<45)&&(A[1]<$(mincstats -quiet -mask ${tmpdir}/headmask.mnc -mask_binvalue 1 -pctT 99.5 ${tmpdir}/${n}/t1.mnc))?A[2]:0" \
+    ${tmpdir}/vessels.mnc ${tmpdir}/${n}/t1.mnc ${tmpdir}/headmask.mnc ${tmpdir}/${n}/otsu.mnc
 
 ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/otsu.mnc Otsu 4 ${tmpdir}/${n}/otsu.mnc
 ThresholdImage 3 ${tmpdir}/${n}/otsu.mnc ${tmpdir}/${n}/weight6.mnc 2 Inf 1 0
@@ -892,8 +903,8 @@ if [[ -n ${excludemask} ]]; then
 fi
 
 N4BiasFieldCorrection -d 3 -i ${tmpdir}/${n}/t1.mnc -b [ 200 ] -c [ 300x300x300x300,1e-4 ] \
-  -w ${tmpdir}/${n}/weight6.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
-  --histogram-sharpening [ 0.05,0.01,200 ] -r 0
+    -w ${tmpdir}/${n}/weight6.mnc -o [ ${tmpdir}/${n}/t1.mnc,${tmpdir}/${n}/bias.mnc ] -s 2 --verbose \
+    --histogram-sharpening [ 0.05,0.01,200 ] -r 0
 
 ImageMath 3 ${tmpdir}/${n}/bias.mnc / ${tmpdir}/${n}/bias.mnc $(mincstats -quiet -mean ${tmpdir}/${n}/bias.mnc)
 ImageMath 3 ${tmpdir}/${n}/prebias.mnc m ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias.mnc
@@ -912,14 +923,17 @@ mv -f ${tmpdir}/input.crop.mnc ${input}
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/headmask.mnc -o ${tmpdir}/headmask.mnc -r ${input} -n GenericLabel
 minccalc -clobber -quiet ${N4_VERBOSE:+-verbose} -unsigned -byte -expression 'A[0]>1.01?1:0' ${input} ${tmpdir}/nonzero.mnc
 
+#Backup the original bias field estimate, in case cropping is not done, so we can correct the neck tissues
 cp -f ${tmpdir}/${n}/prebias.mnc ${tmpdir}/bias_orig.mnc
 
+#Need to fill the bias field with 1's in case we're padding the image
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/${n}/prebias.mnc ${tmpdir}/${n}/bias_resample.mnc
 cp -f ${tmpdir}/${n}/prebias.mnc ${tmpdir}/prebias.mnc
 mincresample -clobber -quiet ${N4_VERBOSE:+-verbose} -fill -fillvalue 1 -like ${input} ${tmpdir}/prebias.mnc ${tmpdir}/prebias_resample.mnc
 mv -f ${tmpdir}/${n}/bias_resample.mnc ${tmpdir}/${n}/bias.mnc
 mv -f ${tmpdir}/prebias_resample.mnc ${tmpdir}/prebias.mnc
 
+#Resample the exlude mask into the new recropped space
 if [[ -n ${_arg_exclude} ]]; then
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${excludemask} -r ${input} -n GenericLabel -o ${excludemask}
 fi
@@ -940,35 +954,29 @@ ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/masks/tissuemask.mnc Otsu 4 ${t
 ThresholdImage 3 ${tmpdir}/masks/tissuemask.mnc ${tmpdir}/masks/tissuemask.mnc 2 Inf 1 0
 itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/${n}/t1.mnc ${tmpdir}/vessels.mnc
 
-#First try registration to MNI space, multistep
-if [[ -s ${tmpdir}/template_bootstrap.xfm ]]; then
-    reg_initalization=${tmpdir}/template_bootstrap.xfm
-else
-    reg_initalization=${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm
-fi
 
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --output [ ${tmpdir}/${n}/mni ] \
     --use-histogram-matching 1 \
-    --initial-moving-transform ${reg_initalization} \
+    --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
     --transform Similarity[ 0.1 ] \
-        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
-        --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
-        --shrink-factors 6x6x5x4x3x2 \
-        --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
-        --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
+    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,32,None ] \
+    --convergence [ 500x500x500x500x450x150,1e-6,10 ] \
+    --shrink-factors 6x6x5x4x3x2 \
+    --smoothing-sigmas 2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037mm \
+    --masks [ ${REGISTRATIONBRAINMASK},NOMASK ] \
     --transform Affine[ 0.1 ] \
-        --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
-        --convergence [ 500x450x150x50,1e-6,10 ] \
-        --shrink-factors 4x3x2x1 \
-        --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
-        --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
+    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+    --convergence [ 500x450x150x50,1e-6,10 ] \
+    --shrink-factors 4x3x2x1 \
+    --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
+    --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
 
 unset reg_initalization
 
 #Make MNI-space copy of brain for BeAST
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/t1.mnc \
-  ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
+    ${MNI_XFM:+-t ${MNI_XFM}} -t ${tmpdir}/${n}/mni0_GenericAffine.xfm -n BSpline[ 5 ] -o ${tmpdir}/${n}/mni.mnc -r ${RESAMPLEMODEL}
 
 #BSpline[ 5 ] does weird things to intensity, clip back to positive range
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp -const2 0 65535 ${tmpdir}/${n}/mni.mnc ${tmpdir}/${n}/mni.clamp.mnc
@@ -978,18 +986,23 @@ mv -f ${tmpdir}/${n}/mni.clamp.mnc ${tmpdir}/${n}/mni.mnc
 iMath 3 ${tmpdir}/${n}/shrinkmask.mnc ME ${RESAMPLEMODELBRAINMASK} 2 1 ball 1
 
 #Intensity normalize
-volume_pol ${N4_VERBOSE:+--verbose} --order 1 --min 0 --max 100 --noclamp ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL} --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} ${tmpdir}/${n}/mni.norm.mnc
+volume_pol ${N4_VERBOSE:+--verbose} --order 1 --min 0 --max 100 --noclamp \
+    --source_mask ${tmpdir}/${n}/shrinkmask.mnc --target_mask ${RESAMPLEMODELBRAINMASK} \
+    ${tmpdir}/${n}/mni.mnc ${RESAMPLEMODEL}  ${tmpdir}/${n}/mni.norm.mnc
 
 #Run a quick beast to get a brain mask
-mincbeast ${N4_VERBOSE:+-verbose} -sparse -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
+mincbeast ${N4_VERBOSE:+-verbose} -sparse -v2 -double -fill -median -same_res -flip -conf ${BEAST_CONFIG} \
+  ${BEASTLIBRARY_DIR} ${tmpdir}/${n}/mni.norm.mnc ${tmpdir}/${n}/beastmask.mnc
 
 #Resample beast mask and MNI mask to native space
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] ${MNI_XFM:+-t [${MNI_XFM},1]} -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] ${MNI_XFM:+-t [${MNI_XFM},1]} \
+    -i ${tmpdir}/${n}/beastmask.mnc -o ${tmpdir}/${n}/bmask.mnc -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${tmpdir}/${n}/t1.mnc \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -i ${REGISTRATIONBRAINMASK} \
+    -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 
-#BeAST Failure mode of a chunk of almost unattached voxels
+#BeAST Failure mode of a chunk of almost unattached voxels, try to remove
 iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/bmask.mnc GetLargestComponent ${tmpdir}/${n}/bmask.mnc
 iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
@@ -1004,23 +1017,26 @@ iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
 
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${WMPRIOR} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc -n Linear
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${GMPRIOR} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc -n Linear
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${CSFPRIOR} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc -n Linear
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc -n Linear
 
 if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
 fi
 
+#Estimate outlier to exclude from classification
 outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/hotmask.mnc
 ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
+#Classify brain
 Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
     -i PriorProbabilityImages[ 3,${tmpdir}/${n}/SegmentationPrior%d.mnc,0.1 ] -k Gaussian -m [ 0.1,1x1x1 ] \
     -o ${tmpdir}/${n}/classify.mnc -r 1 -p Socrates[ 0 ] --winsorize-outliers BoxPlot
 
+#Convert classification to a brain mask and brain tissue mask
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/2.mnc 2 2 1 0
 ThresholdImage 3 ${tmpdir}/${n}/classify.mnc ${tmpdir}/${n}/3.mnc 3 3 1 0
 ImageMath 3 ${tmpdir}/${n}/2.mnc GetLargestComponent ${tmpdir}/${n}/2.mnc
@@ -1062,7 +1078,7 @@ if [[ ${_arg_debug} == "off" ]]; then
 fi
 
 ################################################################################
-#Round 3, N4 with classification from nonlinear registered priors
+#Round 2, N4 with classification from nonlinear registered priors
 ################################################################################
 ((++n))
 mkdir -p ${tmpdir}/${n}
@@ -1077,11 +1093,11 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --use-histogram-matching 1 \
     --initial-moving-transform ${tmpdir}/$((n - 1))/mni0_GenericAffine.xfm \
     --transform Affine[ 0.05 ] \
-            --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
-            --convergence [ 500x450x150x50,1e-6,10 ] \
-            --shrink-factors 4x3x2x1 \
-            --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
-            --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask2.mnc ]
+    --metric Mattes[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,64,None ] \
+    --convergence [ 500x450x150x50,1e-6,10 ] \
+    --shrink-factors 4x3x2x1 \
+    --smoothing-sigmas 1.64470459404x1.20112240879x0.735534255037x0.0mm \
+    --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/$((n - 1))/mask2.mnc ]
 
 cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
 iMath 3 ${tmpdir}/${n}/extractmask.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
@@ -1090,45 +1106,52 @@ ImageMath 3 ${tmpdir}/${n}/t1.extracted.mnc m ${tmpdir}/${n}/t1.mnc ${tmpdir}/${
 ImageMath 3 ${tmpdir}/extractmodel.mnc m ${REGISTRATIONMODEL} ${REGISTRATIONBRAINMASK}
 
 #Non linearly register priors
+#We use the extracted images because subjects with different distance between
+#brain and skull consistently fail
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --output [ ${tmpdir}/${n}/nonlin ] \
     --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
     --use-histogram-matching 1 \
     --transform SyN[ 0.1,3,0 ] \
     --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,4 ] \
-      --convergence [ 500x500x500x500x500x500x500x500x500x500x0x0x0,1e-6,10 ] \
-      --shrink-factors 5x5x5x5x5x5x5x5x5x4x3x2x1 \
-      --smoothing-sigmas 5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037x0.0mm \
-      --masks [ NOMASK,NOMASK ] \
+    --convergence [ 500x500x500x500x500x500x500x500x500x500x0x0x0,1e-6,10 ] \
+    --shrink-factors 5x5x5x5x5x5x5x5x5x4x3x2x1 \
+    --smoothing-sigmas 5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037x0.0mm \
+    --masks [ NOMASK,NOMASK ] \
     --transform SyN[ 0.1,3,0 ] \
-      --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2 ] \
-      --convergence [ 500x500x225x225x0,1e-6,10 ] \
-      --shrink-factors 5x4x3x2x1 \
-      --smoothing-sigmas 2.08040503813x1.64470459404x1.20112240879x0.735534255037x0.0mm \
-      --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/${n}/extractmask.mnc ]
+    --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2 ] \
+    --convergence [ 500x500x225x225x0,1e-6,10 ] \
+    --shrink-factors 5x4x3x2x1 \
+    --smoothing-sigmas 2.08040503813x1.64470459404x1.20112240879x0.735534255037x0.0mm \
+    --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/${n}/extractmask.mnc ]
 
-#Save MNI space registration to QC later
+#Save MNI space registration for QC later
 cp -f ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine.xfm
 
 #Resample MNI Priors to Native space for classification
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${WMPRIOR} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc -n Linear
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm \
+    -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior3.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${GMPRIOR} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc -n Linear
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm \
+    -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior2.mnc -n Linear
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${CSFPRIOR} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc -n Linear
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm \
+    -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/SegmentationPrior1.mnc -n Linear
 
-#Masks
+#Resample back to subject space
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${REGISTRATIONBRAINMASK} \
-  -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
+    -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
 minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>=0.25||A[1]>=0.25)?1:0' \
-  ${tmpdir}/${n}/SegmentationPrior3.mnc ${tmpdir}/${n}/SegmentationPrior2.mnc ${tmpdir}/${n}/mniprobmask.mnc
+    ${tmpdir}/${n}/SegmentationPrior3.mnc ${tmpdir}/${n}/SegmentationPrior2.mnc ${tmpdir}/${n}/mniprobmask.mnc
 
+#Make MNI mask a combination of both the MNI mask and the tissue probabilty mask
 ImageMath 3 ${tmpdir}/${n}/mnimask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mniprobmask.mnc
 
 #Last time we generate MNI mask, save it outside iterations
 cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/masks/mnimask.mnc
 
+#Vote a consensus mask from prior masking estimates
 ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/masks/*mnc
 iMath 3 ${tmpdir}/${n}/mask.mnc MC ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
@@ -1139,6 +1162,7 @@ if [[ -n ${excludemask} ]]; then
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${excludemask}
 fi
 
+#Find outliers to exclude from classification
 ThresholdImage 3 ${tmpdir}/$((n - 1))/classify.mnc ${tmpdir}/${n}/outlier_wm.mnc 3 3 1 0
 ImageMath 3 ${tmpdir}/${n}/outlier_wm.mnc GetLargestComponent ${tmpdir}/${n}/outlier_wm.mnc
 outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/outlier_wm.mnc ${tmpdir}/${n}/hotmask.mnc
@@ -1167,7 +1191,6 @@ iMath 3 ${tmpdir}/${n}/weightmask.mnc ME ${tmpdir}/${n}/weightmask.mnc 1 1 ball 
 ImageMath 3 ${tmpdir}/${n}/weightmask.mnc GetLargestComponent ${tmpdir}/${n}/weightmask.mnc
 iMath 3 ${tmpdir}/${n}/weightmask.mnc MD ${tmpdir}/${n}/weightmask.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/weightmask.mnc
-
 
 ImageMath 3 ${tmpdir}/${n}/weight.mnc m ${tmpdir}/${n}/weight.mnc ${tmpdir}/${n}/hotmask.mnc
 
@@ -1217,7 +1240,7 @@ while true; do
     outlier_mask ${tmpdir}/${n}/t1.mnc ${tmpdir}/${n}/outlier_wm.mnc ${tmpdir}/${n}/hotmask.mnc
     ImageMath 3 ${tmpdir}/${n}/mask_D.mnc m ${tmpdir}/${n}/mask_D.mnc ${tmpdir}/${n}/hotmask.mnc
 
-    #Do an initial classification using the last round posteriors, remove outliers
+    #Do a classification using the last round posteriors, remove outliers
     Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 ] -a ${tmpdir}/${n}/t1.mnc -s 1x2 -s 2x3 \
         -i PriorProbabilityImages[ 3,${tmpdir}/$((n - 1))/SegmentationPosteriors%d.mnc,0.5 ] -k Gaussian -m [ 0.1,1x1x1 ] \
         -o [ ${tmpdir}/${n}/classify.mnc,${tmpdir}/${n}/SegmentationPosteriors%d.mnc ] -r 1 -p Aristotle[ 1 ] --winsorize-outliers BoxPlot \
@@ -1266,7 +1289,7 @@ while true; do
         rm -rf ${tmpdir}/$((n - 1))
     fi
 
-    # Break if greater than iterations or less than convergence threshold
+    # Break if greater than max iterations or less than convergence threshold
     [[ (${n} -lt ${_arg_max_iterations}) && ($(python -c "print($(tail -1 ${tmpdir}/convergence.txt) > ${_arg_convergence_threshold})") == "True") ]] || break
 
 done
@@ -1284,11 +1307,11 @@ if [[ ${_arg_autocrop} == "on" ]]; then
     ExtractRegionFromImageByMask 3 ${originput} ${tmpdir}/originput.crop.mnc ${tmpdir}/finalheadmask.mnc 1 10
     mv -f ${tmpdir}/originput.crop.mnc ${originput}
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} -i ${tmpdir}/headmask.mnc \
-      -o ${tmpdir}/headmask.mnc -n GenericLabel
-   cp -f ${tmpdir}/headmask.mnc ${tmpdir}/fgmask.mnc
+        -o ${tmpdir}/headmask.mnc -n GenericLabel
+    cp -f ${tmpdir}/headmask.mnc ${tmpdir}/fgmask.mnc
 else
     antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} -i ${tmpdir}/fgmask_orig.mnc \
-      -o ${tmpdir}/fgmask.mnc -n GenericLabel
+        -o ${tmpdir}/fgmask.mnc -n GenericLabel
     ImageMath 3 ${originput} m ${originput} ${tmpdir}/fgmask.mnc
 fi
 
@@ -1299,10 +1322,10 @@ n4classifymask=${tmpdir}/finalclassify.mnc
 
 #Reconstruct a final bias field
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} \
-  -n BSpline[5] -i ${tmpdir}/${n}/bias.mnc -o ${tmpdir}/finalbias.mnc
+    -n BSpline[5] -i ${tmpdir}/${n}/bias.mnc -o ${tmpdir}/finalbias.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -r ${originput} \
-  -n BSpline[5] -i ${tmpdir}/bias_orig.mnc -o ${tmpdir}/bias_orig.mnc
+    -n BSpline[5] -i ${tmpdir}/bias_orig.mnc -o ${tmpdir}/bias_orig.mnc
 
 ImageMath 3 ${tmpdir}/finalbias.mnc addtozero ${tmpdir}/finalbias.mnc ${tmpdir}/bias_orig.mnc
 ImageMath 3 ${tmpdir}/finalbias.mnc addtozero ${tmpdir}/finalbias.mnc 1
@@ -1323,7 +1346,7 @@ valuehigh=$(mincstats -quiet -mask ${tmpdir}/fgmask.mnc -mask_binvalue 1 -pctT 9
 mapping=($(python -c "import numpy as np; print(np.array2string(np.linalg.solve(np.array([[1, ${valuelow}, ${valuelow}**2], [1, ((${valuewm}+${valuegm})/2.0), ((${valuewm}+${valuegm})/2.0)**2], [1, ${valuehigh}, ${valuehigh}**2]]),np.array([0,32767,65535])),separator= ' ')[1:-1])"))
 
 minccalc -quiet ${N4_VERBOSE:+-verbose} -short -unsigned -expression "clamp(A[0]^2*${mapping[2]} + A[0]*${mapping[1]} + ${mapping[0]},0,65535)" \
-  ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
+    ${n4corrected} $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc
 
 mv -f $(dirname ${n4corrected})/$(basename ${n4corrected} .mnc).norm.mnc ${n4corrected}
 
