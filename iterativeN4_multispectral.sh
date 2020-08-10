@@ -1095,17 +1095,17 @@ antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
     --initial-moving-transform ${tmpdir}/${n}/mni0_GenericAffine.xfm \
     --use-histogram-matching 1 \
     --transform SyN[ 0.1,3,0 ] \
-    --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2 ] \
+    --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,4 ] \
       --convergence [ 500x500x500x500x500x500x500x500x500x500x0x0x0,1e-6,10 ] \
       --shrink-factors 5x5x5x5x5x5x5x5x5x4x3x2x1 \
       --smoothing-sigmas 5.50423435717x5.07820577132x4.65192708599x4.22532260674x3.79828256043x3.37064139994x2.94213702015x2.51232776601x2.08040503813x1.64470459404x1.20112240879x0.735534255037x0.0mm \
       --masks [ NOMASK,NOMASK ] \
     --transform SyN[ 0.1,3,0 ] \
-      --metric CC[ ${REGISTRATIONMODEL},${tmpdir}/${n}/t1.mnc,1,2 ] \
+      --metric CC[ ${tmpdir}/extractmodel.mnc,${tmpdir}/${n}/t1.extracted.mnc,1,2 ] \
       --convergence [ 500x500x225x225x0,1e-6,10 ] \
       --shrink-factors 5x4x3x2x1 \
       --smoothing-sigmas 2.08040503813x1.64470459404x1.20112240879x0.735534255037x0.0mm \
-      --masks [ ${REGISTRATIONBRAINMASK},NOMASK ]
+      --masks [ ${REGISTRATIONBRAINMASK},${tmpdir}/${n}/extractmask.mnc ]
 
 #Save MNI space registration to QC later
 cp -f ${tmpdir}/${n}/mni0_GenericAffine.xfm ${tmpdir}/mni0_GenericAffine.xfm
