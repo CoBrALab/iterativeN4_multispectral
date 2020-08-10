@@ -576,7 +576,7 @@ function classify_to_mask() {
     iMath 3 ${tmpdir}/${n}/classifymask.mnc ME ${tmpdir}/${n}/classifymask.mnc 1 1 ball 1
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc GetLargestComponent ${tmpdir}/${n}/classifymask.mnc
     iMath 3 ${tmpdir}/${n}/classifymask.mnc MD ${tmpdir}/${n}/classifymask.mnc 2 1 ball 1
-    iMath 3 ${tmpdir}/bmask_E.mnc ME ${tmpdir}/mnimask.mnc 10 1 ball 1
+    iMath 3 ${tmpdir}/bmask_E.mnc ME ${tmpdir}/masks/mnimask.mnc 10 1 ball 1
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc addtozero ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/bmask_E.mnc
     ImageMath 3 ${tmpdir}/${n}/classifymask.mnc FillHoles ${tmpdir}/${n}/classifymask.mnc 2
 
@@ -803,6 +803,8 @@ else
     excludemask=""
 fi
 
+mkdir -p ${tmpdir}/masks
+
 ################################################################################
 #Round 0
 #Iterative estimation of a mask with multilevel otsu to find foreground-background
@@ -934,6 +936,8 @@ minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '1'
 mkdir -p ${tmpdir}/${n}
 
 minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/masks/tissuemask.mnc Otsu 4 ${tmpdir}/headmask.mnc
+ThresholdImage 3 ${tmpdir}/masks/tissuemask.mnc ${tmpdir}/masks/tissuemask.mnc 2 Inf 1 0
 itk_vesselness --clobber --scales 8 --rescale ${tmpdir}/${n}/t1.mnc ${tmpdir}/vessels.mnc
 
 #First try registration to MNI space, multistep
@@ -990,10 +994,11 @@ iMath 3 ${tmpdir}/${n}/bmask.mnc ME ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/bmask.mnc GetLargestComponent ${tmpdir}/${n}/bmask.mnc
 iMath 3 ${tmpdir}/${n}/bmask.mnc MD ${tmpdir}/${n}/bmask.mnc 1 1 ball 1
 
-cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/${n}/mask.mnc
-cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/bmask.mnc
+cp -f ${tmpdir}/${n}/bmask.mnc ${tmpdir}/masks/bmask.mnc
+cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/masks/affinemask.mnc
 
-ImageMath 3 ${tmpdir}/${n}/mask_D.mnc addtozero ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/mnimask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask.mnc addtozero ${tmpdir}/masks/bmask.mnc ${tmpdir}/masks/affinemask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask.mnc GetLargestComponent ${tmpdir}/${n}/mask.mnc
 
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 2 1 ball 1
 
@@ -1028,6 +1033,7 @@ iMath 3 ${tmpdir}/${n}/weight.mnc MD ${tmpdir}/${n}/weight.mnc 2 1 ball 1
 
 iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/weight.mnc 5 1 ball 1
 ImageMath 3 ${tmpdir}/${n}/mask2.mnc FillHoles ${tmpdir}/${n}/mask2.mnc 2
+cp -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/masks/classifymask${n}.mnc
 
 #User provided exclusion mask
 if [[ -n ${excludemask} ]]; then
@@ -1062,6 +1068,8 @@ fi
 mkdir -p ${tmpdir}/${n}
 
 minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/masks/tissuemask.mnc Otsu 4 ${tmpdir}/headmask.mnc
+ThresholdImage 3 ${tmpdir}/masks/tissuemask.mnc ${tmpdir}/masks/tissuemask.mnc 2 Inf 1 0
 
 #Affine register to MNI space, tweak registration
 antsRegistration ${N4_VERBOSE:+--verbose} -d 3 --float 1 --minc \
@@ -1113,19 +1121,16 @@ antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${CSFPRIOR} \
 #Masks
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${REGISTRATIONBRAINMASK} \
   -t [ ${tmpdir}/${n}/mni0_GenericAffine.xfm,1 ] -t ${tmpdir}/${n}/nonlin1_inverse_NL.xfm -r ${tmpdir}/${n}/t1.mnc -o ${tmpdir}/${n}/mnimask.mnc -n GenericLabel
-minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>=0.5||A[1]>=0.5)?1:0' \
+minccalc -quiet ${N4_VERBOSE:+-verbose} -clobber -unsigned -byte -expression '(A[0]>=0.25||A[1]>=0.25)?1:0' \
   ${tmpdir}/${n}/SegmentationPrior3.mnc ${tmpdir}/${n}/SegmentationPrior2.mnc ${tmpdir}/${n}/mniprobmask.mnc
-iMath 3 ${tmpdir}/${n}/mniprobmask.mnc MD ${tmpdir}/${n}/mniprobmask.mnc 2 1 ball 1
-ImageMath 3 ${tmpdir}/${n}/mniprobmask.mnc FillHoles ${tmpdir}/${n}/mniprobmask.mnc 2
-iMath 3 ${tmpdir}/${n}/mniprobmask.mnc ME ${tmpdir}/${n}/mniprobmask.mnc 1 1 ball 1
+
+ImageMath 3 ${tmpdir}/${n}/mnimask.mnc addtozero ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/${n}/mniprobmask.mnc
 
 #Last time we generate MNI mask, save it outside iterations
-cp -f ${tmpdir}/${n}/mniprobmask.mnc ${tmpdir}/mniprobmask.mnc
-cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mnimask.mnc
+cp -f ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/masks/mnimask.mnc
 
-#Combine the masks because sometimes beast misses badly biased cerebellum
-mincmath -quiet ${N4_VERBOSE:+-verbose} -unsigned -labels -byte -or ${tmpdir}/${n}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/mask2.mnc
-mv -f ${tmpdir}/${n}/mask2.mnc ${tmpdir}/${n}/mask.mnc
+ImageMath 3 ${tmpdir}/${n}/mask.mnc MajorityVoting ${tmpdir}/masks/*mnc
+iMath 3 ${tmpdir}/${n}/mask.mnc MC ${tmpdir}/${n}/mask.mnc 1 1 ball 1
 
 #Expand the mask a bit
 iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
@@ -1148,9 +1153,10 @@ Atropos ${N4_VERBOSE:+--verbose} -d 3 -x ${tmpdir}/${n}/mask_D.mnc -c [ 5,0.005 
 #Convert classification to the mask
 classify_to_mask
 
-ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/${n}/mask.mnc ${tmpdir}/${n}/classifymask.mnc
+cp ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/masks/classifymask${n}.mnc
 
-
+ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/masks/*mnc
+iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/mask2.mnc 1 1 ball 1
 
 #Combine GM and WM proabability images into a N4 mask,
 ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
@@ -1196,6 +1202,8 @@ while true; do
     mkdir -p ${tmpdir}/${n}
 
     minc_anlm ${N4_VERBOSE:+--verbose} --mt ${ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS} ${tmpdir}/$((n - 1))/corrected.mnc ${tmpdir}/${n}/t1.mnc
+    ThresholdImage 3 ${tmpdir}/${n}/t1.mnc ${tmpdir}/masks/tissuemask.mnc Otsu 4 ${tmpdir}/headmask.mnc
+    ThresholdImage 3 ${tmpdir}/masks/tissuemask.mnc ${tmpdir}/masks/tissuemask.mnc 2 Inf 1 0
 
     cp -f ${tmpdir}/$((n - 1))/mask2.mnc ${tmpdir}/${n}/mask.mnc
     iMath 3 ${tmpdir}/${n}/mask_D.mnc MD ${tmpdir}/${n}/mask.mnc 1 1 ball 1
@@ -1216,8 +1224,11 @@ while true; do
         -l [ 0.69314718055994530942,1 ]
 
     classify_to_mask
-    ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/mnimask.mnc ${tmpdir}/mniprobmask.mnc ${tmpdir}/bmask.mnc ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/$((n - 1))/classifymask.mnc
 
+    cp -f ${tmpdir}/${n}/classifymask.mnc ${tmpdir}/masks/classifymask${n}.mnc
+
+    ImageMath 3 ${tmpdir}/${n}/mask2.mnc MajorityVoting ${tmpdir}/masks/*mnc
+    iMath 3 ${tmpdir}/${n}/mask2.mnc MC ${tmpdir}/${n}/mask2.mnc 1 1 ball 1
 
     #Combine GM and WM probably images into a N4 mask,
     ImageMath 3 ${tmpdir}/${n}/weight.mnc PureTissueN4WeightMask ${tmpdir}/${n}/SegmentationPosteriors2.mnc ${tmpdir}/${n}/SegmentationPosteriors3.mnc
@@ -1299,9 +1310,9 @@ ImageMath 3 ${tmpdir}/finalbias.mnc addtozero ${tmpdir}/finalbias.mnc 1
 ImageMath 3 ${n4corrected} / ${originput} ${tmpdir}/finalbias.mnc
 
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/mask2.mnc -o ${tmpdir}/finalmask.mnc -r ${n4corrected} -n GenericLabel
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${n4corrected} -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/masks/bmask.mnc -o ${tmpdir}/finalbmask.mnc -r ${n4corrected} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classifymask.mnc -o ${tmpdir}/finalclassifymask.mnc -r ${n4corrected} -n GenericLabel
-antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${n4corrected} -n GenericLabel
+antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/masks/mnimask.mnc -o ${tmpdir}/finalmnimask.mnc -r ${n4corrected} -n GenericLabel
 antsApplyTransforms ${N4_VERBOSE:+--verbose} -d 3 -i ${tmpdir}/${n}/classify.mnc -o ${tmpdir}/finalclassify.mnc -r ${n4corrected} -n GenericLabel
 
 valuelow=$(mincstats -quiet -mask ${tmpdir}/fgmask.mnc -mask_binvalue 1 -pctT 0.1 ${n4corrected})
