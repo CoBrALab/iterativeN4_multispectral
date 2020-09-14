@@ -766,6 +766,9 @@ function test_templates() {
 ##########START OF SCRIPT#############
 #Forceably convert to MINC2, and clamp range to avoid negative numbers, rescale to 0-65535
 mincconvert -2 ${originput} ${tmpdir}/originput.mnc
+#Rescale initial data into entirely positive range (fix for completely negative data)
+ImageMath 3 ${tmpdir}/originput.mnc RescaleImage ${tmpdir}/originput.mnc 0 65535
+#Very mild range clamp for very hot voxels
 mincmath -quiet ${N4_VERBOSE:+-verbose} -clamp \
     -const2 $(mincstats -quiet -floor 1e-12 -pctT 0.1 ${tmpdir}/originput.mnc) \
     $(mincstats -quiet -floor 1e-12 -pctT 99.9 ${tmpdir}/originput.mnc) \
