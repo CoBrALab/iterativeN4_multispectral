@@ -792,7 +792,7 @@ for dim in ${inputres}; do
     if [[ $(python -c "print(${dim}>(${isostep}-1e-6))") == True ]]; then
         blurs+=1e-12x
     else
-        blurs+=$(python -c "import math; print(math.sqrt((1.0**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
+        blurs+=$(python -c "import math; print(math.sqrt((${isostep}**2.0 - ${dim}**2.0)/(2.0*math.sqrt(2.0*math.log(2.0)))**2.0))")x
     fi
 done
 
