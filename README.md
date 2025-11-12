@@ -1,3 +1,8 @@
+# DEPRECATED
+
+Please see https://github.com/CoBrALab/synthstrip_N3 instead for a human T1 preprocessing pipeline
+
+
 iterativeN4_multispectral.sh
 ------------------------------
 
